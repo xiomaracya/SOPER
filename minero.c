@@ -18,6 +18,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
     pthread_t h[hilos];
     Datos datos [hilos];
     long int intervalo = floor(POW_LIMIT/hilos);
+    printf("%ld ", intervalo);
     long int sobran = POW_LIMIT-intervalo*hilos;
     long int inicio=0;
     long int objetivo_ronda = objetivo;
@@ -45,7 +46,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
             error = pthread_create(&h[j], NULL, busqueda, &datos[j]);
             if(error!=0) {
                 fprintf(stderr, "pthread_create: %s\n", strerror(error));
-                exit(EXIT_FAILURE);
+                return EXIT_FAILURE;
             }
         }
         for (j=0; j<hilos; j++){
@@ -63,15 +64,24 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
 
 void *busqueda(void *arg){
     Datos *args = (Datos*)arg;
-    int i;
+    long int i;
 
     i = args->inicio_rango;
     while (i<=args->final_rango && *args->solucion == -1){
         if(args->objetivo==pow_hash(i)){
+            printf("Solucion: %ld", i);
             *args->solucion = i;
             return NULL;
         }
         i++;
     }
+    if(*args->solucion != -1){
+        printf("1");
+    } else if (i>args->final_rango){
+        printf("2");
+    } else {
+        printf("3");
+    }
     return NULL;
+    
 }

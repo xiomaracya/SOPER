@@ -14,20 +14,23 @@ typedef struct {
     long int objetivo;
 } Datos;
 int proceso_minero(int rondas, int hilos, long int objetivo){
-    int i, j, error, terminar=0;
+    int i, j, error;
     pthread_t h[hilos];
     Datos datos [hilos];
-    long int intervalo = floor(POW_LIMIT/hilos);
-    printf("%ld ", intervalo);
+    long int intervalo = floor((POW_LIMIT+1)/hilos);
     long int sobran = POW_LIMIT-intervalo*hilos;
-    long int inicio=0;
     long int objetivo_ronda = objetivo;
 
     for (i=0; i<rondas; i++) {
         long int solucion = -1;
-        for (j=0; j<sobran; j++){
+        long int inicio=0;
+        for (j=0; j<hilos; j++){
             datos[j].inicio_rango = inicio;
-            inicio+=intervalo+1;
+            if(j<sobran) {
+                inicio+=intervalo+1;
+            } else {
+                inicio+=intervalo;
+            }
             datos[j].final_rango = inicio-1;
             datos[j].solucion = &solucion;
             datos[j].objetivo = objetivo_ronda;
@@ -38,17 +41,6 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
             }
 
         }
-        for (; j<hilos; j++){
-            datos[j].inicio_rango = inicio;
-            inicio+=intervalo;
-            datos[j].final_rango = inicio-1;
-            datos[j].solucion = &solucion;
-            error = pthread_create(&h[j], NULL, busqueda, &datos[j]);
-            if(error!=0) {
-                fprintf(stderr, "pthread_create: %s\n", strerror(error));
-                return EXIT_FAILURE;
-            }
-        }
         for (j=0; j<hilos; j++){
             error = pthread_join(h[j], NULL);
             if(error!=0) {
@@ -57,6 +49,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
             }
         }
         printf("El valor para la ronda %d es %ld\n", i, solucion);
+        printf("Se cumple porque %ld = %ld\n\n", objetivo_ronda, pow_hash(i));
         objetivo_ronda = solucion;
     }
     return EXIT_SUCCESS;
@@ -69,18 +62,10 @@ void *busqueda(void *arg){
     i = args->inicio_rango;
     while (i<=args->final_rango && *args->solucion == -1){
         if(args->objetivo==pow_hash(i)){
-            printf("Solucion: %ld", i);
             *args->solucion = i;
             return NULL;
         }
         i++;
-    }
-    if(*args->solucion != -1){
-        printf("1");
-    } else if (i>args->final_rango){
-        printf("2");
-    } else {
-        printf("3");
     }
     return NULL;
     

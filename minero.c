@@ -49,7 +49,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
             }
         }
         printf("El valor para la ronda %d es %ld\n", i, solucion);
-        printf("Se cumple porque %ld = %ld\n\n", objetivo_ronda, pow_hash(i));
+        printf("Se cumple porque %ld = %ld\n\n", objetivo_ronda, pow_hash(solucion));
         objetivo_ronda = solucion;
     }
     return EXIT_SUCCESS;

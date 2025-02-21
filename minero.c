@@ -13,17 +13,23 @@ typedef struct {
     long int *solucion;
     long int objetivo;
 } Datos;
-int proceso_minero(int rondas, int hilos, long int objetivo){
+
+int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, int fd_lectura){
     int i, j, error;
+    int nbytes;
     pthread_t h[hilos];
     Datos datos [hilos];
     long int intervalo = floor((POW_LIMIT+1)/hilos);
     long int sobran = POW_LIMIT-intervalo*hilos;
     long int objetivo_ronda = objetivo;
+    long int solucion = -1;
+    long int inicio=0;
+    char objetivo_char[8];
+    char solucion_char[8];
 
     for (i=0; i<rondas; i++) {
-        long int solucion = -1;
-        long int inicio=0;
+        solucion = -1;
+        inicio=0;
         for (j=0; j<hilos; j++){
             datos[j].inicio_rango = inicio;
             if(j<sobran) {
@@ -49,7 +55,18 @@ int proceso_minero(int rondas, int hilos, long int objetivo){
             }
         }
         printf("El valor para la ronda %d es %ld\n", i, solucion);
-        printf("Se cumple porque %ld = %ld\n\n", objetivo_ronda, pow_hash(solucion));
+        sprintf(objetivo_char, "%ld", objetivo_ronda);
+        sprintf(solucion_char, "%ld", solucion);
+        nbytes = write(fd_escritura, objetivo_char, sizeof(objetivo_char));
+        if (nbytes == -1) {
+            perror("write");
+            exit(EXIT_FAILURE);
+        }
+        nbytes = write(fd_escritura, solucion_char, sizeof(solucion_char));
+        if (nbytes == -1) {
+            perror("write");
+            exit(EXIT_FAILURE);
+        }
         objetivo_ronda = solucion;
     }
     return EXIT_SUCCESS;

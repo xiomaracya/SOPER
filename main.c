@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "minero.h"
+#include "monitor.h"
 
 int main(int argc, char *argv[]){
 
@@ -17,7 +18,24 @@ int main(int argc, char *argv[]){
     long int objetivo = atol(argv[1]);
     int status;
     int retorno_minero;
+    int retorno_monitor;
     pid_t pid;
+
+    int fd1[2];
+    int fd2[2];
+    int pipe_status;
+
+    pipe_status = pipe(fd1);
+    if (pipe_status == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    pipe_status = pipe(fd2);
+    if (pipe_status == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
 
     pid = fork();
     if(pid<0) {
@@ -30,11 +48,18 @@ int main(int argc, char *argv[]){
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
             // MONITOR
-            printf("Monitor\n");
-            exit(EXIT_SUCCESS);
+            close(fd2[0]);
+            close(fd1[1]);
+            retorno_monitor = monitor(fd2[1], fd1[0]);
+            exit(retorno_monitor);
         } else {
             // MINERO
-            retorno_minero = proceso_minero(rondas, hilos, objetivo);
+            close(fd2[1]);
+            close(fd1[0]);
+            retorno_minero = proceso_minero(rondas, hilos, objetivo, fd1[1], fd2[0]);
+            printf("OK");
+            fflush(stdout);
+            close(fd1[1]);
             wait(&status);
             if (status == 1) {
                 printf("Monitor exited unexpectedly\n");

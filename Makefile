@@ -1,4 +1,4 @@
-TARGET = main
+TARGET = mrush
 
 CC = gcc
 
@@ -16,6 +16,3 @@ $(TARGET): $(OBJS)
 
 clean:
 	rm -f $(OBJS) $(TARGET)
-
-distclean: clean
-	rm -f *~

@@ -56,8 +56,14 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
                 return EXIT_FAILURE;
             }
         }
-        sprintf(objetivo_char, "%ld", objetivo_ronda);
-        sprintf(solucion_char, "%ld", solucion);
+        if (sprintf(objetivo_char, "%ld", objetivo_ronda) < 0) {
+            perror("sprintf");
+            return EXIT_FAILURE;
+        }
+        if (sprintf(solucion_char, "%ld", solucion) < 0) {
+            perror("sprintf");
+            return EXIT_FAILURE;
+        }
         nbytes = write(fd_escritura, objetivo_char, sizeof(objetivo_char));
         if (nbytes == -1) {
             perror("write");
@@ -84,6 +90,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
                 printf("The solution has been invalidated\n");
                 return EXIT_FAILURE;
             }
+            return EXIT_FAILURE;
         }
         objetivo_ronda = solucion;
     }

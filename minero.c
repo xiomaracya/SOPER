@@ -73,6 +73,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
             perror("read");
             return EXIT_FAILURE;
         }
+
         if(pow_hash(solucion) == objetivo_ronda) {
             if(strcmp(retorno, "OK")) {
                 printf("The solution has been invalidated\n");
@@ -83,7 +84,6 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
                 printf("The solution has been invalidated\n");
                 return EXIT_FAILURE;
             }
-            return EXIT_FAILURE;
         }
         objetivo_ronda = solucion;
     }

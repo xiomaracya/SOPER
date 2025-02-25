@@ -38,7 +38,6 @@ int monitor(int fd_escritura, int fd_lectura) {
             } else {
                 printf("Solution rejected: %08ld ! --> %08ld\n", objetivo, solucion);
                 strcpy(retorno, "ERROR");
-                return EXIT_FAILURE;
             }
 
             nbytes = write(fd_escritura, retorno, sizeof(retorno));

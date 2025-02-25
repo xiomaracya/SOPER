@@ -16,7 +16,7 @@ int main(int argc, char *argv[]){
     int rondas = atoi(argv[2]);
     int hilos = atoi(argv[3]);
     long int objetivo = atol(argv[1]);
-    int status;
+    int status = -1;
     int retorno_minero;
     int retorno_monitor;
     pid_t pid;
@@ -63,10 +63,10 @@ int main(int argc, char *argv[]){
             close(fd1[1]);
             close(fd2[0]);
             waitpid(pid2,&status,0);
-            if (status == 1) {
+            if (status == -1) {
                 printf("Monitor exited unexpectedly\n");
             } else {
-                printf("Monitor exited with status %d\n", status);
+                printf("Monitor exited with status %d\n", WEXITSTATUS(status));
             }
             exit(retorno_minero);
         }
@@ -77,10 +77,10 @@ int main(int argc, char *argv[]){
         close(fd2[0]);
         close(fd2[1]);
         waitpid(pid,&status,0);
-        if (status == 1) {
+        if (status == -1) {
             printf("Miner exited unexpectedly\n");
         } else {
-            printf("Miner exited with status %d\n", status);
+            printf("Miner exited with status %d\n", WEXITSTATUS(status));
         }
 
     }

@@ -36,7 +36,7 @@ int monitor(int fd_escritura, int fd_lectura) {
                 fflush(stdout);
                 strcpy(retorno, "OK");
             } else {
-                printf("Solution rejected: %08ld ! --> %08ld\n", objetivo, solucion);
+                printf("Solution rejected: %08ld !-> %08ld\n", objetivo, solucion);
                 strcpy(retorno, "ERROR");
             }
 

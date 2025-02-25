@@ -10,7 +10,7 @@ int main(int argc, char *argv[]){
 
     if(argc!=4){
         printf("Debes introducir tres argumentos\n");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     int rondas = atoi(argv[2]);
@@ -26,16 +26,22 @@ int main(int argc, char *argv[]){
     int fd2[2];
     int pipe_status;
 
+    /* CONTROL DE ERRORES */
+    if (rondas<=0 || hilos<=0) {
+        printf("Error en los argumentos\n");
+        return EXIT_FAILURE;
+    }
+
     pipe_status = pipe(fd1);
     if (pipe_status == -1) {
         perror("pipe");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     pipe_status = pipe(fd2);
     if (pipe_status == -1) {
         perror("pipe");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     pid = fork();
@@ -63,10 +69,10 @@ int main(int argc, char *argv[]){
             close(fd1[1]);
             close(fd2[0]);
             waitpid(pid2,&status,0);
-            if (status == -1) {
-                printf("Monitor exited unexpectedly\n");
+            if (status == 0) {
+                printf("Monitor exited with status %d\n", EXIT_SUCCESS);
             } else {
-                printf("Monitor exited with status %d\n", WEXITSTATUS(status));
+                printf("Monitor exited with status %d\n", EXIT_FAILURE);
             }
             exit(retorno_minero);
         }
@@ -77,13 +83,13 @@ int main(int argc, char *argv[]){
         close(fd2[0]);
         close(fd2[1]);
         waitpid(pid,&status,0);
-        if (status == -1) {
-            printf("Miner exited unexpectedly\n");
+        if (status == 0) {
+            printf("Miner exited with status %d\n", EXIT_SUCCESS);
         } else {
-            printf("Miner exited with status %d\n", WEXITSTATUS(status));
+            printf("Miner exited with status %d\n", EXIT_FAILURE);
         }
 
     }
 
-    exit(EXIT_SUCCESS);
+    return EXIT_SUCCESS;
 }

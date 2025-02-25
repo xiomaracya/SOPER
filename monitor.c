@@ -25,7 +25,7 @@ int monitor(int fd_escritura, int fd_lectura) {
             perror("read");
             return EXIT_FAILURE;
         }
-        
+
         if (nbytes>0) {
 
             solucion = atol(solucion_char);
@@ -49,8 +49,6 @@ int monitor(int fd_escritura, int fd_lectura) {
         }
     } while (nbytes>0);
 
-    close(fd_escritura);
-    close(fd_lectura);
 
     if(nbytes==0) {
         return EXIT_SUCCESS;

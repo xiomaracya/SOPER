@@ -52,12 +52,16 @@ int main(int argc, char *argv[]){
             close(fd2[0]);
             close(fd1[1]);
             retorno_monitor = monitor(fd2[1], fd1[0]);
+            close(fd2[1]);
+            close(fd1[0]);
             exit(retorno_monitor);
         } else {
             // MINERO
             close(fd2[1]);
             close(fd1[0]);
             retorno_minero = proceso_minero(rondas, hilos, objetivo, fd1[1], fd2[0]);
+            close(fd1[1]);
+            close(fd2[0]);
             waitpid(pid2,&status,0);
             if (status == 1) {
                 printf("Monitor exited unexpectedly\n");

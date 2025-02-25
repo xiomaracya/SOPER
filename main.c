@@ -20,6 +20,7 @@ int main(int argc, char *argv[]){
     int retorno_minero;
     int retorno_monitor;
     pid_t pid;
+    pid_t pid2;
 
     int fd1[2];
     int fd2[2];
@@ -42,11 +43,11 @@ int main(int argc, char *argv[]){
         perror("fork");
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
-        pid = fork();
-        if(pid<0) {
+        pid2 = fork();
+        if(pid2<0) {
             perror("fork");
             exit(EXIT_FAILURE);
-        } else if (pid == 0) {
+        } else if (pid2 == 0) {
             // MONITOR
             close(fd2[0]);
             close(fd1[1]);
@@ -57,10 +58,7 @@ int main(int argc, char *argv[]){
             close(fd2[1]);
             close(fd1[0]);
             retorno_minero = proceso_minero(rondas, hilos, objetivo, fd1[1], fd2[0]);
-            printf("OK");
-            fflush(stdout);
-            close(fd1[1]);
-            wait(&status);
+            waitpid(pid2,&status,0);
             if (status == 1) {
                 printf("Monitor exited unexpectedly\n");
             } else {
@@ -70,7 +68,11 @@ int main(int argc, char *argv[]){
         }
     } else {
         // PROCESO PRINCIPAL
-        wait(&status);
+        close(fd1[0]);
+        close(fd1[1]);
+        close(fd2[0]);
+        close(fd2[1]);
+        waitpid(pid,&status,0);
         if (status == 1) {
             printf("Miner exited unexpectedly\n");
         } else {

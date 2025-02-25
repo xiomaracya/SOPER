@@ -22,10 +22,11 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
     long int intervalo = floor((POW_LIMIT+1)/hilos);
     long int sobran = POW_LIMIT-intervalo*hilos;
     long int objetivo_ronda = objetivo;
-    long int solucion = -1;
-    long int inicio=0;
+    long int solucion;
+    long int inicio;
     char objetivo_char[8];
     char solucion_char[8];
+    char retorno[6];
 
     for (i=0; i<rondas; i++) {
         solucion = -1;
@@ -40,6 +41,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
             datos[j].final_rango = inicio-1;
             datos[j].solucion = &solucion;
             datos[j].objetivo = objetivo_ronda;
+
             error = pthread_create(&h[j], NULL, busqueda, &datos[j]);
             if(error!=0) {
                 fprintf(stderr, "pthread_create: %s\n", strerror(error));
@@ -54,21 +56,30 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
                 return EXIT_FAILURE;
             }
         }
-        printf("El valor para la ronda %d es %ld\n", i, solucion);
         sprintf(objetivo_char, "%ld", objetivo_ronda);
         sprintf(solucion_char, "%ld", solucion);
         nbytes = write(fd_escritura, objetivo_char, sizeof(objetivo_char));
         if (nbytes == -1) {
             perror("write");
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
         }
         nbytes = write(fd_escritura, solucion_char, sizeof(solucion_char));
         if (nbytes == -1) {
             perror("write");
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
+        }
+        nbytes = read(fd_lectura, retorno, sizeof(retorno));
+        if (nbytes == -1) {
+            perror("read");
+            return EXIT_FAILURE;
+        }
+        if(!strcmp(retorno, "ERROR")) {
+            return EXIT_FAILURE;
         }
         objetivo_ronda = solucion;
     }
+    close(fd_escritura);
+    close(fd_lectura);
     return EXIT_SUCCESS;
 }
 
@@ -76,13 +87,11 @@ void *busqueda(void *arg){
     Datos *args = (Datos*)arg;
     long int i;
 
-    i = args->inicio_rango;
-    while (i<=args->final_rango && *args->solucion == -1){
+    for (i = args->inicio_rango; i<=args->final_rango && *args->solucion == -1; i++){
         if(args->objetivo==pow_hash(i)){
             *args->solucion = i;
             return NULL;
         }
-        i++;
     }
     return NULL;
     

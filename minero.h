@@ -19,6 +19,8 @@
  * @param rondas number of rounds to search a target
  * @param hilos number of thread to use
  * @param objetivo solution to be searched
+ * @param fd_escritura file descriptor that allows to write in the first pipe
+ * @param fd_lectura file descriptor that allows to read in the second pipe
  * @return status of the operation EXIT_FAILURE or EXIT_SUCCESS
  */
 int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, int fd_lectura);

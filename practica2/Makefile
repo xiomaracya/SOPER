@@ -2,11 +2,11 @@ TARGET = voting
 
 CC = gcc
 
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -lpthread
 
-SRCS = principal.c
+SRCS = principal.c votante.c
 
-OBJS = principal.o
+OBJS = principal.o votante.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)

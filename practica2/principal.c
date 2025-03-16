@@ -10,8 +10,6 @@
 #include "votante.h"
 
 #define MAX_PID 30
-#define SEM_NAME1 "/semaforo1"
-#define SEM_NAME2 "/semaforo2"
 
 
 typedef struct {
@@ -38,6 +36,21 @@ int main (int argc, char *argv[]){
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
     Network network;
 
+    if(argc==3) {
+        network.N_PROCS = atoi(argv[1]);
+        network.N_SECS = atoi(argv[2]);
+    }
+
+    // CONTROL DE PARÁMETROS
+    if (argc != 3 || network.N_PROCS < 1 || network.N_SECS < 1) {
+        while(network.N_PROCS < 1 || network.N_SECS < 1){
+        
+            printf("Error al introducir los parámetros, vuelve a intentarlo.\n");
+            scanf("%d %d", &network.N_PROCS, &network.N_SECS);
+            
+        }
+    }
+
     act_int.sa_handler = handle_sigint;
     sigemptyset(&(act_int.sa_mask));
     act_int.sa_flags = 0;
@@ -58,17 +71,6 @@ int main (int argc, char *argv[]){
     sigemptyset(&(act_alarm.sa_mask));
     act_alarm.sa_flags = 0;
 
-    network.N_PROCS = atoi(argv[1]);
-    network.N_SECS = atoi(argv[2]);
-
-    // CONTROL DE PARÁMETROS
-    while(argc != 3 || network.N_PROCS < 1 || network.N_SECS < 1){
-        
-        printf("Error al introducir los parámetros, vuelve a intentarlo.\n");
-        scanf("%d %d", &network.N_PROCS, &network.N_SECS);
-        
-    }
-
     // ABRIR FICHERO CON LOS PIDS
     f = fopen("PIDS", "w");
     if(f == NULL){
@@ -77,12 +79,12 @@ int main (int argc, char *argv[]){
     }
 
     // INICIALIZAR LOS SEMÁFOROS
-    if((sem1 = sem_open(SEM_NAME1, O_CREAT,0))==SEM_FAILED) {
+    if((sem1 = sem_open("/sem1", O_CREAT, 0666,1))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
 
-    if((sem2 = sem_open(SEM_NAME2, O_CREAT,0))==SEM_FAILED) {
+    if((sem2 = sem_open("/sem2", O_CREAT, 0666,1))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
@@ -91,7 +93,7 @@ int main (int argc, char *argv[]){
     for (i = 0; i< network.N_PROCS; i++){
         pid= fork();
         if (pid == 0) {
-            votante(sem1,sem2);
+            votante(sem1, sem2);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
@@ -130,5 +132,7 @@ int main (int argc, char *argv[]){
     fflush(stdout);
 
     fclose(f);
+    sem_close(sem1);
+    sem_close(sem2);
     return EXIT_SUCCESS;
 }

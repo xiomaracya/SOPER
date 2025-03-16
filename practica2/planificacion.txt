@@ -1,0 +1,34 @@
+1. Estructura de network
+    network = pid, vote, nproc, nsec, mask
+
+2.señales = alarm, sigint, sigterm, sigusr1, sigusr2
+sgiad
+3. Principal
+    3.1 verificar argumentos
+    3.2 Escribir fichero
+    3.4 Crear los fork 
+    3.5 enviar señal SIGUSR1 a procesos hijos
+        si se acaba el tiempo devuelve ok
+        else signint o sigterm devuelve ERROR
+    3.6 Liberar voting, semaforos (close y unlink), fichero y mensaje
+4. Votantes
+    4.1 recibir señal
+    4.2 mediante semaforos eligen al candidato (se crean dos semaforos)
+    candidato
+        enviar señal sigusr2
+        espera a resultado
+        muestra resultado de o "Candidate %d => [ Y Y N Y N ] => Accepted";
+        espera de 250ms
+        devuelve SIGUSR1 al principal
+    votante 
+        generan voto
+        escriben en la Estructura
+        escriben en el fichero
+        pause()
+        liberan sus recursos
+5. SIGALARM: tiene que terminar en n_secs para devolver OK;
+
+FUNCIONES
+semtraywait(sem): intenta bajar el semáforo y si no puede bajarlo es no bloqueante (no bloquea el proceso) -> lo usamos para buscar el candidato (lo usamos para hacer un wait no bloqueante)
+
+

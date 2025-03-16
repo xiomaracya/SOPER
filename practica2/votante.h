@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "principal.h"
+#include "signal_handles.h"
+#include <semaphore.h>
 
-int votante();
+int votante(sem_t *sem1, sem_t *);

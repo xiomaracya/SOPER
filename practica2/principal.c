@@ -16,6 +16,7 @@
 void handle_sigint(int sig) {
 
     printf (" Signal number %d received \n", sig );
+    printf("Finishing by signal\n");
     exit(EXIT_SUCCESS);
 
 }
@@ -30,6 +31,7 @@ void handle_sigterm(int sig) {
 void handle_sigalarm(int sig) {
 
     printf (" Signal number %d received \n", sig );
+    printf("Finishing by alarm");
     exit(EXIT_SUCCESS);
 
 }
@@ -93,6 +95,10 @@ int main (int argc, char *argv[]){
     sigemptyset(&(act_alarm.sa_mask));
     act_alarm.sa_flags = 0;
 
+    // ALARM
+    sigaction(SIGALRM, &act_alarm, NULL);
+    alarm(network.N_SECS);
+
     // ABRIR FICHERO CON LOS PIDS
     f = fopen("PIDS", "w");
     if(f == NULL){
@@ -106,8 +112,6 @@ int main (int argc, char *argv[]){
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
-
-    return 0;
 
     if((sem2 = sem_open("/semaforo2", O_CREAT, 0644, 1))==SEM_FAILED) {
         perror("sem_open");
@@ -164,10 +168,13 @@ int main (int argc, char *argv[]){
         }
     }
 
-    printf("Finishing by signal\n");
+    pause();
     fflush(stdout);
 
+    unlink();
     fclose(f);
+    sem_unlink(sem1);
+    sem_unlink(sem2);
     sem_close(sem1);
     sem_close(sem2);
     return EXIT_SUCCESS;

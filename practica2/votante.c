@@ -33,6 +33,7 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
     }
 
     if(sem_trywait(sem1) == 0) {
+        printf("OK");
         for (int i = 0; i < network->N_PROCS; i++) {
             if(network->pid[i] != getpid()) {
                 kill(network->pid[i], SIGUSR2);

@@ -3,27 +3,48 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "signal_handles.h"
+#include "principal.h"
 #include <semaphore.h>
 #include "votante.h"
+#include <errno.h>
 
 #define MAX_PID 30
 
+void handle_sigint(int sig) {
 
-typedef struct {
-    int vote;
-} Votes;
+    printf (" Signal number %d received \n", sig );
+    exit(EXIT_SUCCESS);
 
-typedef struct {
-    pid_t pid[MAX_PID];
-    Votes vote[MAX_PID];
-    int N_PROCS;
-    int N_SECS;
-    sigset_t mask;
+}
 
-} Network;
+void handle_sigterm(int sig) {
+
+    printf (" Signal number %d received \n", sig );
+    exit(EXIT_SUCCESS);
+
+}
+
+void handle_sigalarm(int sig) {
+
+    printf (" Signal number %d received \n", sig );
+    exit(EXIT_SUCCESS);
+
+}
+
+void handle_sigusr1(int sig) {
+    // handler para cuando un votante reciba SIGUSR1
+    printf("Proceso hijo %d recibió %d\n", getpid(), sig);
+    exit(EXIT_SUCCESS);
+}
+
+void handle_sigusr2(int sig) {
+    // handler para cuando un votante reciba SIGUSR1
+    printf("Proceso hijo %d recibió %d\n", getpid(), sig);
+    exit(EXIT_SUCCESS);
+}
 
 int main (int argc, char *argv[]){
 
@@ -32,7 +53,8 @@ int main (int argc, char *argv[]){
 
     // INICIALIZAR HANDLES
     FILE *f;
-    int i, nWriten, pid;
+    int i;
+    pid_t pid;
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
     Network network;
 
@@ -78,41 +100,49 @@ int main (int argc, char *argv[]){
         return 1;
     }
 
+
     // INICIALIZAR LOS SEMÁFOROS
-    if((sem1 = sem_open("/sem1", O_CREAT, 0666,1))==SEM_FAILED) {
+    if((sem1 = sem_open("/semaforo1", O_CREAT, 0644, 1))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
 
-    if((sem2 = sem_open("/sem2", O_CREAT, 0666,1))==SEM_FAILED) {
+    return 0;
+
+    if((sem2 = sem_open("/semaforo2", O_CREAT, 0644, 1))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
+
 
     /// CREAR PROCESOS VOTANTES
     for (i = 0; i< network.N_PROCS; i++){
         pid= fork();
-        if (pid == 0) {
-            votante(sem1, sem2);
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            votante(sem1, sem2, &network, f);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
             network.pid[i] = pid;
-    
         }
     }
 
     // ESCRIBIR EN EL FICHERO LOS PID
     for (i = 0; i<network.N_PROCS; i++){
-        nWriten = fprintf(f, "Proceso %d con PID %d\n", i+1, network.pid[i]);
-        if(nWriten == -1){
+        if(fprintf(f, "PID %d\n", network.pid[i]) == -1) {
             return EXIT_FAILURE;
         }
     }
 
     // ENVIAR SEÑALES A VOTANTES
     for (int i = 0; i < network.N_PROCS; i++) {
-        kill(network.pid[i], SIGUSR1);
+        if(kill(network.pid[i], SIGUSR1) == -1) {
+            perror("kill");
+            return EXIT_FAILURE;
+        }
     }
 
     if (sigaction(SIGINT, &act_int, NULL)<0) {
@@ -121,11 +151,17 @@ int main (int argc, char *argv[]){
     }       
 
     for (int i = 0; i < network.N_PROCS; i++) {
-        kill(network.pid[i], SIGTERM);
+        if(kill(network.pid[i], SIGTERM) == -1) {
+            perror("kill");
+            return EXIT_FAILURE;
+        }
     }
 
     for (int i = 0; i < network.N_PROCS; i++) {
-        waitpid(network.pid[i], NULL, 0);
+        if(waitpid(network.pid[i], NULL, 0) == -1) {
+            perror("waitpid");
+            return EXIT_FAILURE;
+        }
     }
 
     printf("Finishing by signal\n");

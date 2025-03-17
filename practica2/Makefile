@@ -4,9 +4,9 @@ CC = gcc
 
 CFLAGS = -Wall -Wextra -g -lpthread
 
-SRCS = principal.c votante.c signal_handles.c
+SRCS = principal.c votante.c
 
-OBJS = principal.o votante.o signal_handles.c
+OBJS = principal.o votante.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)

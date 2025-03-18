@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "principal.h"
+#include <strings.h>
 #include <semaphore.h>
 #include <time.h>
 #include <errno.h>
@@ -13,10 +14,8 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
     struct sigaction act_usr1;
     struct sigaction act_usr2;
 
-    char palabra [4];
-    pid_t pid=0;
     char voto;
-    int i, flag=0;
+    int i, flag=0, pid;
     int yes = 0, no = 0;
 
     act_usr1.sa_handler = handle_sigusr1;
@@ -32,36 +31,43 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
         return EXIT_FAILURE;
     }
 
+    if (sigaction(SIGUSR2, &act_usr2, NULL) < 0) {
+        perror("sigaction SIGUSR2");
+        return EXIT_FAILURE;
+    }
+
+    // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
-        printf("OK");
+        printf("Candidato");
         for (int i = 0; i < network->N_PROCS; i++) {
             if(network->pid[i] != getpid()) {
                 kill(network->pid[i], SIGUSR2);
             }
         }
 
+        f = fopen("PIDS", "r");
         while (flag==0) {
+            flag = 1;
             for(i=0; i<network->N_PROCS; i++) {
-                if (network->pid[i] == 'Y' || network->pid[i] == 'N') {
-                    flag=1;
-                } else {
-                    flag=0;
+                fscanf(f, "Proceso %d vota %c\n", &pid, &voto);
+                network->vote[i] = voto;
+                if (voto != 'Y' && voto != 'N') {
+                    flag = 0;
                     break;
                 }
+            }
+            if (flag == 1){
+                break;
             }
             sleep(0.001);
         }
 
-        for (i=0; i<network->N_PROCS; i++) {
-            fscanf(f, "%s %d", palabra, &pid);
-            fprintf(f, "VOTO %c", network->vote[i]);
-        }
-
         printf("Candidate %d => [", getpid());
         for (int i = 0; i < network->N_PROCS; i++) {
-            printf("%c", network->vote[i]);
+            printf(" %c ", network->vote[i]);
         }
         printf("] => ");
+        
         for (i=0; i<network->N_PROCS; i++) {
             if (network->vote[i] == 'Y') {
                 yes++;
@@ -77,34 +83,31 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
         }
         fflush(stdout);
 
-        sleep(0.25);
-        return EXIT_SUCCESS;
-    } else {
-        if (sigaction(SIGUSR2, &act_usr2, NULL) < 0) {
-            perror("sigaction SIGUSR2");
-            return EXIT_FAILURE;
-        }
+        sleep(2);
 
+        return EXIT_SUCCESS;
+    /// SEMAFORO = 0 -> VOTANTES
+    } else {
+        printf("Votantes\n");
         sem_wait(sem2);
 
-        srand(time(NULL));
+        srand(getpid());
         if(rand() % 2==0) {
             voto = 'N';
         } else {
             voto = 'Y';
         }
 
-        for (i=0; i<network->N_PROCS; i++) {
-            if (network->pid[i] == getpid()) {
-                break;
-            }
+        FILE *temp_f = fopen("PIDS", "a+");  // Abrir archivo para añadir votos en modo sobreescritura
+        if (temp_f == NULL) {
+            perror("Error abriendo el archivo PIDS");
+            return EXIT_FAILURE;
         }
 
-        network->vote[i] = voto;
+        fprintf(temp_f, "Proceso %d vota %c\n", getpid(), voto);
+        fclose(temp_f);
 
         sem_post(sem2);
         return EXIT_SUCCESS;
     }
-
-
 }

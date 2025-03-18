@@ -138,59 +138,59 @@ int main (int argc, char *argv[]){
     }
     sem_post(sem2);
 
-    while (1){
-        // ABRIR FICHERO CON LOS PIDS
-        f = fopen("PIDS", "w");
-        if(f == NULL){
-            perror("Abrir fichero");
+    // ABRIR FICHERO CON LOS PIDS
+    f = fopen("PIDS", "w");
+    if(f == NULL){
+        perror("Abrir fichero");
+        return EXIT_FAILURE;
+    }
+
+    /// CREAR PROCESOS VOTANTES
+    for (i = 0; i< network.N_PROCS + 1; i++){
+        pid= fork();
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            votante(sem1, sem2, &network, f);
+            exit(EXIT_SUCCESS);
+        } else {
+            // Proceso principal guarda el PID del votante
+            network.pid[i] = pid;
+        }
+    }
+
+    // ESCRIBIR EN EL FICHERO LOS PID
+    for (i = 0; i<network.N_PROCS+1; i++){
+        if(fprintf(f, "PID %d\n", network.pid[i]) == -1) {
             return EXIT_FAILURE;
         }
+    }
 
-        /// CREAR PROCESOS VOTANTES
-        for (i = 0; i< network.N_PROCS; i++){
-            pid= fork();
-            if (pid < 0) {
-                perror("fork");
-                exit(EXIT_FAILURE);
-            } else if (pid == 0) {
-                votante(sem1, sem2, &network, f);
-                exit(EXIT_SUCCESS);
-            } else {
-                // Proceso principal guarda el PID del votante
-                network.pid[i] = pid;
-            }
+    fclose(f);
+
+    // ENVIAR SEÑALES A VOTANTES
+    for (int i = 0; i < network.N_PROCS+1; i++) {
+        if(kill(network.pid[i], SIGUSR1) == -1) {
+            perror("kill");
+            return EXIT_FAILURE;
         }
+    }
 
-        // ESCRIBIR EN EL FICHERO LOS PID
-        for (i = 0; i<network.N_PROCS; i++){
-            if(fprintf(f, "PID %d\n", network.pid[i]) == -1) {
-                return EXIT_FAILURE;
-            }
-        }
-
-        // ENVIAR SEÑALES A VOTANTES
-        for (int i = 0; i < network.N_PROCS; i++) {
-            if(kill(network.pid[i], SIGUSR1) == -1) {
+    pause();
+    sigwait(&mask, &sig);
+    if (sig == SIGINT){
+        
+        for (int i = 0; i < network.N_PROCS+1; i++) {
+            if(kill(network.pid[i], SIGTERM) == -1) {
                 perror("kill");
                 return EXIT_FAILURE;
             }
         }
-
-        pause();
-        sigwait(&mask, &sig);
-        if (sig == SIGINT){
-            
-            for (int i = 0; i < network.N_PROCS; i++) {
-                if(kill(network.pid[i], SIGTERM) == -1) {
-                    perror("kill");
-                    return EXIT_FAILURE;
-                }
-            }
-            for (int i = 0; i < network.N_PROCS; i++) {
-                if(waitpid(network.pid[i], NULL, 0) == -1) {
-                    perror("waitpid");
-                    return EXIT_FAILURE;
-                }
+        for (int i = 0; i < network.N_PROCS+1; i++) {
+            if(waitpid(network.pid[i], NULL, 0) == -1) {
+                perror("waitpid");
+                return EXIT_FAILURE;
             }
         }
     }

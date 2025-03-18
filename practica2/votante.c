@@ -38,8 +38,7 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
 
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
-        printf("Candidato");
-        for (int i = 0; i < network->N_PROCS; i++) {
+        for (int i = 0; i < network->N_PROCS+1; i++) {
             if(network->pid[i] != getpid()) {
                 kill(network->pid[i], SIGUSR2);
             }
@@ -48,6 +47,9 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
         f = fopen("PIDS", "r");
         while (flag==0) {
             flag = 1;
+            for(i=0; i<network->N_PROCS+1; i++) {
+                fscanf(f, "PID %d\n", &pid);
+            }
             for(i=0; i<network->N_PROCS; i++) {
                 fscanf(f, "Proceso %d vota %c\n", &pid, &voto);
                 network->vote[i] = voto;
@@ -83,12 +85,11 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
         }
         fflush(stdout);
 
-        sleep(2);
+        sleep(0.25);
 
         return EXIT_SUCCESS;
     /// SEMAFORO = 0 -> VOTANTES
     } else {
-        printf("Votantes\n");
         sem_wait(sem2);
 
         srand(getpid());
@@ -98,14 +99,14 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network, FILE *f) {
             voto = 'Y';
         }
 
-        FILE *temp_f = fopen("PIDS", "a+");  // Abrir archivo para añadir votos en modo sobreescritura
-        if (temp_f == NULL) {
+        f = fopen("PIDS", "a");  // Abrir archivo para añadir votos en modo sobreescritura
+        if (f == NULL) {
             perror("Error abriendo el archivo PIDS");
             return EXIT_FAILURE;
         }
 
-        fprintf(temp_f, "Proceso %d vota %c\n", getpid(), voto);
-        fclose(temp_f);
+        fprintf(f, "Proceso %d vota %c\n", getpid(), voto);
+        fclose(f);
 
         sem_post(sem2);
         return EXIT_SUCCESS;

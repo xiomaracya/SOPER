@@ -11,17 +11,29 @@
 #include <time.h>
 #include <errno.h>
 
-int chooseCandidato(sem_t *sem1, sem_t *sem2, Network *network){
+int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
 
     char buffer[100], *voto, answer;
     int i, flag=0, fd, bytes_leidos;
     int yes = 0, no = 0;
+    int sig, val, val2;
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
         printf("Candidato\n");
+
+        sem_getvalue(sem3, &val);
+        while (val>0) {
+            sem_getvalue(sem3, &val);
+        }
+
+        sigaddset(&network->mask, SIGUSR2);
+        sigdelset(&network->mask, SIGUSR1);
+
         for (int i = 0; i < network->N_PROCS+1; i++) {
             if(network->pid[i] != getpid()) {
+                fflush(stdout);
                 kill(network->pid[i], SIGUSR2);
+                printf("Señal SIGUSR2 enviada\n");
             }
         }
 
@@ -90,6 +102,16 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, Network *network){
     /// SEMAFORO = 0 -> VOTANTES
     } else {
         printf("Votante\n");
+        sem_wait(sem3);
+        if (sigwait(&network->mask, &sig) == 0) {
+            printf("recibi otra senal\n");
+            if (sig == SIGUSR2) {
+                printf("Recibí SIGUSR2\n");
+            }
+        } else {
+            perror("sigwait"); 
+            exit(EXIT_FAILURE);
+        }
         sem_wait(sem2);
 
         srand(getpid());
@@ -111,7 +133,7 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, Network *network){
 
 }
 
-int votante(sem_t *sem1, sem_t *sem2, Network *network) {
+int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
     struct sigaction act_usr1;
     struct sigaction act_usr2;
 
@@ -119,7 +141,7 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network) {
 
     act_usr1.sa_handler = handle_sigusr1;
     sigemptyset(&(act_usr1.sa_mask));
-    act_usr1.sa_flags = 0;;
+    act_usr1.sa_flags = 0;
 
     act_usr2.sa_handler = handle_sigusr2;
     sigemptyset(&(act_usr2.sa_mask));
@@ -137,26 +159,20 @@ int votante(sem_t *sem1, sem_t *sem2, Network *network) {
 
     sigemptyset(&network->mask);
     sigaddset(&network->mask, SIGUSR1);
-    sigaddset(&network->mask, SIGUSR2);
 
     if (sigprocmask(SIG_BLOCK, &network->mask, NULL) != 0) {
         perror("sigprocmask");
         exit(EXIT_FAILURE);
     }
 
-    while (1){
-
-        if (sigwait(&network->mask, &sig) == 0) {
-            if (sig == SIGUSR1) {
-                printf("Recibí SIGUSR1\n");
-                chooseCandidato(sem1, sem2, network);
-            } else if (sig == SIGUSR2) {
-                printf("Recibí SIGUSR2\n");
-            }
-        } else {
-            perror("sigwait"); 
-            exit(EXIT_FAILURE);
+    if (sigwait(&network->mask, &sig) == 0) {
+        if (sig == SIGUSR1) {
+            printf("Recibí SIGUSR1\n");
+            chooseCandidato(sem1, sem2, sem3, network);
         }
+    } else {
+        perror("sigwait"); 
+        exit(EXIT_FAILURE);
     }
     return EXIT_SUCCESS;
     

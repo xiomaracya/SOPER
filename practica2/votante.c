@@ -34,28 +34,26 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             }
         }
 
-        fd = open("PIDS", O_CREAT | O_RDONLY, 0644);
+
+        fd = open("PIDS.txt", O_CREAT | O_RDONLY, 0644);
         while (flag==0) {
             flag = 1;
-            bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
-            if (bytes_leidos == -1) {
+            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
                 perror("Error al leer el archivo");
                 close(fd);
-                return 1;
+                return EXIT_FAILURE;
             }
-            bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
-            if (bytes_leidos == -1) {
+            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
                 perror("Error al leer el archivo");
                 close(fd);
-                return 1;
+                return EXIT_FAILURE;
             }
             buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
 
-            bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
-            if (bytes_leidos == -1) {
+            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
                 perror("Error al leer el archivo");
                 close(fd);
-                return 1;
+                return EXIT_FAILURE;
             }
             buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
 
@@ -101,7 +99,6 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
         printf("Votante\n");
         sem_wait(sem3);
         if (sigwait(&network->mask, &sig) == 0) {
-            printf("recibi otra senal\n");
             if (sig == SIGUSR2) {
                 printf("Recibí SIGUSR2\n");
             }
@@ -118,8 +115,7 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             answer = 'Y';
         }
 
-        unlink("PIDS");
-        fd = open("PIDS", O_WRONLY | O_APPEND , 0644);  // Abrir archivo para añadir votos en modo sobreescritura
+        fd = open("PIDS.txt", O_WRONLY | O_APPEND , 0644);  // Abrir archivo para añadir votos en modo sobreescritura
 
         dprintf(fd, "%d vota %c\n", getpid(), answer);
         close(fd);

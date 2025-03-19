@@ -191,7 +191,7 @@ int main (int argc, char *argv[]){
         printf("INICIAL%d\n",val2);
 
     // ABRIR FICHERO CON LOS PIDS
-    fd = open("PIDS", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    fd = open("PIDS.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
     dprintf(fd, "%d\n", network.N_PROCS);
 
     /// CREAR PROCESOS VOTANTES

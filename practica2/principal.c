@@ -216,6 +216,7 @@ int main (int argc, char *argv[]){
         }
     }
 
+    dprintf(fd, "\n");
     close(fd);
 
     // ENVIAR SEÑALES A VOTANTES

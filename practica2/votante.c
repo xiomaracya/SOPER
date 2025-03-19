@@ -13,7 +13,8 @@
 
 int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
 
-    char buffer[100], *voto, answer;
+    char buffer[1024];
+    char answer, *token;
     int i, flag=0, fd, bytes_leidos;
     int yes = 0, no = 0;
     int sig, val, val2;
@@ -38,30 +39,22 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
         fd = open("PIDS.txt", O_CREAT | O_RDONLY, 0644);
         while (flag==0) {
             flag = 1;
-            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
+            bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
+            if(bytes_leidos == -1) {
                 perror("Error al leer el archivo");
                 close(fd);
                 return EXIT_FAILURE;
             }
-            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
-                perror("Error al leer el archivo");
-                close(fd);
-                return EXIT_FAILURE;
-            }
-            buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
-
-            if(read(fd, buffer, sizeof(buffer) - 1) == -1) {
-                perror("Error al leer el archivo");
-                close(fd);
-                return EXIT_FAILURE;
-            }
-            buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
+            buffer[bytes_leidos] = '\0'; 
 
             // Convertir los votos de la tercera línea
-            voto = strtok(buffer, " ");  // Dividir por espacios
-            for (int i = 0; i < network->N_PROCS && voto != NULL; i++) {
-                network->vote[i] = voto[0];  // Almacenar el voto (Y o N)
-                voto = strtok(NULL, " ");  // Obtener el siguiente token
+            token = strtok(buffer, "\n");  // Dividir por espacios
+            token = strtok(NULL, "\n");  // Dividir por espacios
+            for (int i = 0; i < network->N_PROCS && token != NULL; i++) {
+                token = strtok(NULL, " ");  // Dividir por espacios
+                token = strtok(NULL, " ");  // Dividir por espacios
+                token = strtok(NULL, "\n");  // Dividir por espacios
+                network->vote[i] = token[0];  // Almacenar el voto (Y o N)
             }
 
             if (flag == 1){

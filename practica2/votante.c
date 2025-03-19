@@ -26,9 +26,6 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             sem_getvalue(sem3, &val);
         }
 
-        sigaddset(&network->mask, SIGUSR2);
-        sigdelset(&network->mask, SIGUSR1);
-
         for (int i = 0; i < network->N_PROCS+1; i++) {
             if(network->pid[i] != getpid()) {
                 fflush(stdout);
@@ -159,6 +156,7 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
 
     sigemptyset(&network->mask);
     sigaddset(&network->mask, SIGUSR1);
+    sigaddset(&network->mask, SIGUSR2);
 
     if (sigprocmask(SIG_BLOCK, &network->mask, NULL) != 0) {
         perror("sigprocmask");

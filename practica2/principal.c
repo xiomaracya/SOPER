@@ -108,12 +108,15 @@ void handle_sigalarm(int sig) {
     buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
     char *token = strtok(buffer, "\n");
     num_procesos = atoi(token);
+    for(i= 0; i< num_procesos +1; i++){
+        token = strtok(NULL, " ");
+        pids[i] = atoi(token);
+    }
 
     close(fd);  // Cerrar el fichero
 
     status_total = EXIT_SUCCESS;
     for (i=0; i<num_procesos; i++) {
-        printf("%d\n",pids[i]);
         waitpid(pids[i],&status,0);
         if (status == EXIT_FAILURE) {
             status_total = EXIT_FAILURE;

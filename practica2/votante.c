@@ -185,7 +185,7 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
     }
 
     if (sigwait(&network->mask, &sig) == 0) {
-        while (sig == SIGUSR1) {
+        if (sig == SIGUSR1) {
             printf("pid %d: Recibí SIGUSR1\n", getpid());
             chooseCandidato(sem1, sem2, sem3, network);
         }

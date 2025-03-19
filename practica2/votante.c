@@ -92,7 +92,10 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             }
         }
 
-        return EXIT_SUCCESS;
+        sem_close(sem1);
+        sem_close(sem2);
+        sem_close(sem3);
+        exit(EXIT_SUCCESS);
     /// SEMAFORO = 0 -> VOTANTES
     } else {
         printf("Votante\n");
@@ -121,7 +124,7 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
 
         sem_post(sem2);
 
-        return EXIT_SUCCESS;
+        exit(EXIT_SUCCESS);
     }
 
 }
@@ -190,6 +193,6 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
         perror("sigwait"); 
         exit(EXIT_FAILURE);
     }
-    return EXIT_SUCCESS;
+    exit(EXIT_SUCCESS);
     
 }

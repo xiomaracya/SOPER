@@ -15,10 +15,11 @@
 void handle_sigint(int sig) {
 
     int fd, num_procesos, pids[MAX_PID];
+    int status, status_total, i;
 
     printf("Finishing by signal\n");
     
-    fd = open("PIDS", O_RDONLY);
+    fd = open("PIDS.txt", O_RDONLY);
     if (fd == -1) {
         perror("Error al abrir el archivo de PIDs");
         exit(EXIT_FAILURE);
@@ -52,6 +53,26 @@ void handle_sigint(int sig) {
             perror("Error al enviar SIGTERM");
         }
     }
+
+    status_total = EXIT_SUCCESS;
+    for (i=0; i<num_procesos; i++) {
+        printf("%d\n",pids[i]);
+        waitpid(pids[i],&status,0);
+        if (status == EXIT_FAILURE) {
+            status_total = EXIT_FAILURE;
+        }
+    }
+
+    /*unlink("PIDS");*/
+    close(fd);
+    sem_unlink("/sem1");
+    sem_unlink("/sem2");
+    sem_unlink("/sem3");
+    if(status_total == EXIT_SUCCESS) {
+        exit(EXIT_SUCCESS);
+    } else {
+        exit(EXIT_FAILURE);
+    }
 }
 
 void handle_sigterm(int sig) {
@@ -65,8 +86,51 @@ void handle_sigterm(int sig) {
 }
 
 void handle_sigalarm(int sig) {
+    int fd, num_procesos, pids[MAX_PID];
+    int status, status_total, i;
     printf("Finishing by alarm\n");
-    exit(EXIT_SUCCESS);
+
+    fd = open("PIDS.txt", O_RDONLY);
+    if (fd == -1) {
+        perror("Error al abrir el archivo de PIDs");
+        exit(EXIT_FAILURE);
+    }
+
+    // Leer los PIDs del fichero
+    char buffer[256];  // Buffer temporal para leer el archivo
+    long int bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
+    if (bytes_leidos <= 0) {
+        perror("Error al leer el archivo de PIDs");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
+    char *token = strtok(buffer, "\n");
+    num_procesos = atoi(token);
+
+    close(fd);  // Cerrar el fichero
+
+    status_total = EXIT_SUCCESS;
+    for (i=0; i<num_procesos; i++) {
+        printf("%d\n",pids[i]);
+        waitpid(pids[i],&status,0);
+        if (status == EXIT_FAILURE) {
+            status_total = EXIT_FAILURE;
+        }
+    }
+
+    /*unlink("PIDS");*/
+    close(fd);
+    sem_unlink("/sem1");
+    sem_unlink("/sem2");
+    sem_unlink("/sem3");
+
+    if(status_total == EXIT_SUCCESS) {
+        exit(EXIT_SUCCESS);
+    } else {
+        exit(EXIT_FAILURE);
+    }
 
 }
 
@@ -92,6 +156,7 @@ int main (int argc, char *argv[]){
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
     Network network;
     sigset_t mask;
+    int status, status_total;
 
     if(argc==3) {
         network.N_PROCS = atoi(argv[1]);
@@ -227,13 +292,6 @@ int main (int argc, char *argv[]){
 
     while(1);
 
-    /*unlink("PIDS");*/
-    close(fd);
-    sem_unlink("/sem1");
-    sem_unlink("/sem2");
-    sem_unlink("/sem3");
-    sem_close(sem1);
-    sem_close(sem2);
-    sem_close(sem3);
-    return EXIT_SUCCESS;
+    
+    return status_total;
 }

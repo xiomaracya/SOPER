@@ -85,6 +85,8 @@ int main (int argc, char *argv[]){
 
     sem_t *sem1 = NULL;
     sem_t *sem2 = NULL;
+    sem_t *sem3 = NULL;
+    int val2;
 
     // INICIALIZAR HANDLES
     int i, fd;
@@ -164,6 +166,10 @@ int main (int argc, char *argv[]){
     // ALARM
     alarm(network.N_SECS);
 
+    sem_unlink("/sem1");
+    sem_unlink("/sem2");
+    sem_unlink("/sem3");
+
     // INICIALIZAR LOS SEMÁFOROS
     if((sem1 = sem_open("/sem1", O_CREAT, 0644, 0))==SEM_FAILED) {
         perror("sem_open");
@@ -177,6 +183,13 @@ int main (int argc, char *argv[]){
     }
     sem_post(sem2);
 
+    if((sem3 = sem_open("/sem3", O_CREAT, 0644, network.N_PROCS))==SEM_FAILED) {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    sem_getvalue(sem3, &val2);
+        printf("INICIAL%d\n",val2);
+
     // ABRIR FICHERO CON LOS PIDS
     fd = open("PIDS", O_CREAT | O_WRONLY | O_TRUNC, 0644);
     dprintf(fd, "%d\n", network.N_PROCS);
@@ -188,7 +201,7 @@ int main (int argc, char *argv[]){
             perror("fork");
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
-            votante(sem1, sem2, &network);
+            votante(sem1, sem2, sem3, &network);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
@@ -219,7 +232,9 @@ int main (int argc, char *argv[]){
     close(fd);
     sem_unlink("/sem1");
     sem_unlink("/sem2");
+    sem_unlink("/sem3");
     sem_close(sem1);
     sem_close(sem2);
+    sem_close(sem3);
     return EXIT_SUCCESS;
 }

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -12,15 +13,54 @@
 #include <errno.h>
 
 void handle_sigint(int sig) {
-    
-    printf("Finishing by signal\n");
 
-    exit(EXIT_SUCCESS);
+    int fd, num_procesos, pids[MAX_PID];
+    
+    fd = open("PIDS", O_RDONLY);
+    if (fd == -1) {
+        perror("Error al abrir el archivo de PIDs");
+        exit(EXIT_FAILURE);
+    }
+
+    // Leer los PIDs del fichero
+    char buffer[256];  // Buffer temporal para leer el archivo
+    long int bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
+    if (bytes_leidos <= 0) {
+        perror("Error al leer el archivo de PIDs");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
+    char *token = strtok(buffer, "\n");
+    num_procesos = atoi(token);
+
+    close(fd);  // Cerrar el fichero
+
+    // Convertir el contenido del archivo en PIDs
+    token = strtok(buffer, "\n");  
+    while (token != NULL && num_procesos < MAX_PID) {
+        pids[num_procesos++] = atoi(token);  // Convertir a entero
+        token = strtok(NULL, "\n");
+    }
+
+    // Enviar SIGTERM a cada proceso votante
+    for (int i = 0; i < num_procesos; i++) {
+        if (kill(pids[i], SIGTERM) == -1) {
+            perror("Error al enviar SIGTERM");
+        }
+    }
+
+    printf("Finishing by signal\n");
 
 }
 
 void handle_sigterm(int sig) {
-
+    
+    /*unlink("PIDS");*/
+    unlink("/sem1");
+    unlink("/sem2");
+    printf("Freeing...");
     exit(EXIT_SUCCESS);
 
 }
@@ -33,7 +73,7 @@ void handle_sigalarm(int sig) {
 }
 
 void handle_sigusr1(int sig) {
-
+    printf("Recibido SIGUSR1 en el manejador\n");
 }
 
 void handle_sigusr2(int sig) {
@@ -47,8 +87,7 @@ int main (int argc, char *argv[]){
     sem_t *sem2 = NULL;
 
     // INICIALIZAR HANDLES
-    FILE *f;
-    int i, sig;
+    int i, fd;
     pid_t pid;
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
     Network network;
@@ -139,11 +178,8 @@ int main (int argc, char *argv[]){
     sem_post(sem2);
 
     // ABRIR FICHERO CON LOS PIDS
-    f = fopen("PIDS", "w");
-    if(f == NULL){
-        perror("Abrir fichero");
-        return EXIT_FAILURE;
-    }
+    fd = open("PIDS", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    dprintf(fd, "%d\n", network.N_PROCS);
 
     /// CREAR PROCESOS VOTANTES
     for (i = 0; i< network.N_PROCS + 1; i++){
@@ -152,7 +188,7 @@ int main (int argc, char *argv[]){
             perror("fork");
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
-            votante(sem1, sem2, &network, f);
+            votante(sem1, sem2, &network);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
@@ -162,12 +198,12 @@ int main (int argc, char *argv[]){
 
     // ESCRIBIR EN EL FICHERO LOS PID
     for (i = 0; i<network.N_PROCS+1; i++){
-        if(fprintf(f, "PID %d\n", network.pid[i]) == -1) {
+        if(dprintf(fd, "%d ", network.pid[i]) == -1) {
             return EXIT_FAILURE;
         }
     }
 
-    fclose(f);
+    close(fd);
 
     // ENVIAR SEÑALES A VOTANTES
     for (int i = 0; i < network.N_PROCS+1; i++) {
@@ -178,26 +214,9 @@ int main (int argc, char *argv[]){
     }
 
     pause();
-    sigwait(&mask, &sig);
-    if (sig == SIGINT){
-        
-        for (int i = 0; i < network.N_PROCS+1; i++) {
-            if(kill(network.pid[i], SIGTERM) == -1) {
-                perror("kill");
-                return EXIT_FAILURE;
-            }
-        }
-        for (int i = 0; i < network.N_PROCS+1; i++) {
-            if(waitpid(network.pid[i], NULL, 0) == -1) {
-                perror("waitpid");
-                return EXIT_FAILURE;
-            }
-        }
-    }
-    fflush(stdout);
 
     /*unlink("PIDS");*/
-    fclose(f);
+    close(fd);
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_close(sem1);

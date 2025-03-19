@@ -10,6 +10,6 @@
 #ifndef VOTANTE_H
 #define VOTANTE_H
 
-int votante(sem_t *sem1, sem_t *, Network *network, FILE *f);
+int votante(sem_t *sem1, sem_t *, Network *network);
 
 #endif

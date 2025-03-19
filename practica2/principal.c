@@ -15,6 +15,8 @@
 void handle_sigint(int sig) {
 
     int fd, num_procesos, pids[MAX_PID];
+
+    printf("Finishing by signal\n");
     
     fd = open("PIDS", O_RDONLY);
     if (fd == -1) {
@@ -50,9 +52,6 @@ void handle_sigint(int sig) {
             perror("Error al enviar SIGTERM");
         }
     }
-
-    printf("Finishing by signal\n");
-
 }
 
 void handle_sigterm(int sig) {
@@ -66,7 +65,6 @@ void handle_sigterm(int sig) {
 }
 
 void handle_sigalarm(int sig) {
-
     printf("Finishing by alarm\n");
     exit(EXIT_SUCCESS);
 
@@ -227,7 +225,7 @@ int main (int argc, char *argv[]){
         }
     }
 
-    pause();
+    while(1);
 
     /*unlink("PIDS");*/
     close(fd);

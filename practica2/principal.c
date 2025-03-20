@@ -46,20 +46,8 @@ void handle_sigint(int sig) {
     }
 
     // Convertir el contenido del archivo en PIDs
-    token = strtok(NULL, "\n");  
-    while (token != NULL && num_procesos < MAX_PID) {
-        pids[num_procesos++] = atoi(token);  // Convertir a entero
-        token = strtok(NULL, "\n");
-    }
 
     close(fd);  // Cerrar el fichero
-
-    // Enviar SIGTERM a cada proceso votante
-    for (int i = 0; i < num_procesos; i++) {
-        if (kill(pids[i], SIGTERM) == -1) {
-            perror("Error al enviar SIGTERM");
-        }
-    }
 
     status_total = EXIT_SUCCESS;
 
@@ -82,7 +70,6 @@ void handle_sigterm(int sig) {
     unlink("/sem1");
     unlink("/sem2");
     unlink("/sem3");
-    printf("Proceso %d terminado por SIGTERM\n", getpid());
     exit(EXIT_SUCCESS);
 
 }
@@ -147,7 +134,6 @@ void handle_sigalarm(int sig) {
 }
 
 void handle_sigusr1(int sig) {
-    printf("Recibido SIGUSR1 en el manejador");
 }
 
 void handle_sigusr2(int sig) {
@@ -262,7 +248,6 @@ int main (int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
     sem_getvalue(sem3, &val2);
-    printf("INICIAL%d\n",val2);
 
     // ABRIR FICHERO CON LOS PIDS
     fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, 0644);
@@ -281,10 +266,6 @@ int main (int argc, char *argv[]){
             // Proceso principal guarda el PID del votante
             pids[i] = pid;
         }
-    }
-
-    for (i=0; i<nProc; i++) {
-        printf("pid %d: %d\n", i, pids[i]);
     }
 
     // ESCRIBIR EN EL FICHERO LOS PID

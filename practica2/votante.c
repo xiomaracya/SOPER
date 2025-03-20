@@ -13,7 +13,7 @@
 
 volatile sig_atomic_t newVotante = 1;
 
-int *readpids(int fd, int nProc) {
+int *readpids(int fd, int *nProc) {
     int i;
 
     int bytes_leidos;
@@ -41,11 +41,9 @@ int *readpids(int fd, int nProc) {
 
     // Leer los pids
     token = strtok(buffer, "\n");
-    printf("El primer token es %s\n", token);
-    nProc = atoi(token);
-    for(i= 0; i< nProc; i++){
+    *nProc = atoi(token);
+    for(i= 0; i< *nProc +1; i++){
         token = strtok(NULL, " ");
-        printf("Otro token es %s", token);
         pids[i] = atoi(token);
     }
 
@@ -55,7 +53,7 @@ int *readpids(int fd, int nProc) {
 
 }
 
-char *readvotes(int fd, int nProc, int *ronda) {
+char *readvotes(int fd, int *nProc, int *ronda) {
     int i, j;
 
     int bytes_leidos;
@@ -80,7 +78,6 @@ char *readvotes(int fd, int nProc, int *ronda) {
     }
 
     *ronda+=1;
-    printf("Esta es la ronda %d\n", *ronda);
     bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
     if(bytes_leidos == -1) {
         perror("Error al leer el archivo");
@@ -94,28 +91,19 @@ char *readvotes(int fd, int nProc, int *ronda) {
 
     // Leer los pids
     token = strtok(buffer, "\n");
-    printf("El primer token es %s\n", token);
-    nProc = atoi(token);
-    for(i= 0; i< nProc; i++){
+    *nProc = atoi(token);
+    for(i= 0; i< *nProc; i++){
         token = strtok(NULL, " ");
-        printf("Otro token es %s", token);
         pids[i] = atoi(token);
     }
     token = strtok(NULL, "\n");
-    printf("Otro token es %s", token);
     pids[i] = atoi(token);
     for(j=0; j < *ronda; j++){
-        printf("Escribimos la ronda %d\n", *ronda);
-        for (i = 0; i < nProc-1 && token != NULL; i++) {
-            printf("OK\n");
-            printf("El buffer es %s", buffer);
+        for (i = 0; i < *nProc-1 && token != NULL; i++) {
             token = strtok(NULL, " ");  // Coge el pid
-            printf("El segundo token es %s\n", token);
             token = strtok(NULL, " ");  // Coge la palabra "vota"
-            printf("El tercer token es %s\n", token);
             token = strtok(NULL, "\n");  // Dividir por espacios
             votes[i] = token[0];  // Almacenar el voto (Y o N)
-            printf("Se ha guardado %c\n", votes[i]);
         }
     }
 
@@ -131,13 +119,12 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
     char *votes;
 
     // LEEMOS LOS PIDS DEL FICHERO
-    pids = readpids(fd, nProc);
+    pids = readpids(fd, &nProc);
     if(pids == NULL) {
         return 1;
     }
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
-        printf("Candidato\n");
 
         sem_getvalue(sem3, &val);
         while (val>0) {
@@ -149,15 +136,13 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
             if(pids[i] != getpid()) {
                 fflush(stdout);
                 kill(pids[i], SIGUSR2);
-                printf("Señal SIGUSR2 enviada\n");
             }
         }
 
         fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
 
-        votes = readvotes(fd, nProc, ronda);
+        votes = readvotes(fd, &nProc, ronda);
         usleep(1000);
-        printf("OKKKK<ºn");
 
         printf("Candidate %d => [", getpid());
         for (int i = 0; i < nProc; i++) {
@@ -181,8 +166,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         fflush(stdout);
         usleep(250000);
 
-
-        printf("New votante a 1");
         newVotante = 1;
 
         sem_getvalue(sem2, &val);
@@ -191,14 +174,12 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
             sem_getvalue(sem2, &val);
         }
         sem_post(sem2);
-        printf("OK2\n");
 
         sem_getvalue(sem3, &val);
         while (val != nProc) {
             sem_post(sem3);
             sem_getvalue(sem3, &val);
         }
-        printf("OK3\n");
 
         // Enviar SIGUSR1 a cada proceso votante no candidato
         for (int i = 0; i < nProc + 1; i++) {
@@ -211,13 +192,11 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         return 0;
     /// SEMAFORO = 0 -> VOTANTES
     } else {
-        printf("Votante\n");
 
         sem_wait(sem3);
         sigaddset(&mask, SIGUSR2);
         if (sigwait(&mask, &sig) == 0) {
             if (sig == SIGUSR2) {
-                printf("Recibí SIGUSR2\n");
             }
         } else {
             perror("sigwait"); 
@@ -243,12 +222,11 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         close(fd);
 
         sem_post(sem2);
-        printf("Proceso votante terminado\n");
 
         sigdelset(&mask, SIGUSR2);
         if (sigwait(&mask, &sig) == 0) {
             if (sig == SIGUSR1) {
-                printf("Recibí SIGUSR1\n");
+
             }
         } else {
             perror("sigwait"); 
@@ -324,16 +302,21 @@ int votante(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, sigset_t m
         sigwait(&mask, &sig);
 
         if (sig == SIGUSR1) {
-            printf("PID %d: Recibí SIGUSR1\n", getpid());
             // Repetir proceso de votación si hay un nuevo votante
             while (newVotante) {
-                printf("Vuelve a empezar el bucle\n");
                 sleep(1);
+                /*unlink("PIDS.txt");
+                fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+                dprintf(fd, "%d\n", n);
+                for (i = 0; i<nProc+1; i++){
+                    if(dprintf(fd, "%d ", pids[i]) == -1) {
+                        return EXIT_FAILURE;
+                    }
+                }
+                dprintf(fd, "\n");
+                close(fd);*/
                 chooseCandidato(fd, sem1, sem2, sem3, nProc, mask, &ronda);
-                printf("Un proceso ha terminado choose\n");
-                printf("continua el bucle\n");
             }
-            printf("Se ha salido del bucle\n");
         }
 
         // Uso de sigsuspend para esperar señales sin consumir CPU

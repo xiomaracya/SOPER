@@ -11,13 +11,17 @@
 #include <time.h>
 #include <errno.h>
 
-int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
+volatile sig_atomic_t newVotante = 1;
 
+int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, sem_t *sem4, Network *network){
     char buffer[1024];
     char answer, *token;
     int i, flag=0, fd, bytes_leidos;
     int yes = 0, no = 0;
     int sig, val, val2, nProc, pids[MAX_PID];
+    sigset_t final_mask;
+
+    
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
         printf("Candidato\n");
@@ -28,6 +32,7 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
         }
 
         for (int i = 0; i < network->N_PROCS+1; i++) {
+            newVotante = 0;
             if(network->pid[i] != getpid()) {
                 fflush(stdout);
                 kill(network->pid[i], SIGUSR2);
@@ -83,22 +88,50 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             printf("Rejected\n");
         }
         fflush(stdout);
-        sleep(0.25);
+        usleep(250000);
 
         // Enviar SIGUSR1 a cada proceso votante no candidato
-        for (int i = 0; i < network->N_PROCS; i++) {
+        for (int i = 0; i < network->N_PROCS + 1; i++) {
             if (kill(pids[i], SIGUSR1) == -1) {
                 perror("Error al enviar SIGUSR1");
             }
         }
 
-        sem_close(sem1);
-        sem_close(sem2);
-        sem_close(sem3);
-        exit(EXIT_SUCCESS);
+        sem_post(sem1);
+
+        printf("New votante a 1");
+        newVotante = 1;
+        for (i=0; i<network->N_PROCS+1; i++) {
+            sem_post(sem4);
+        }
+
+        sem_getvalue(sem1, &val);
+        while (val != 0) {
+            sem_wait(sem1);
+            sem_getvalue(sem1, &val);
+        }
+        sem_post(sem1);
+        printf("OK1\n");
+
+        sem_getvalue(sem2, &val);
+        while (val != 0) {
+            sem_wait(sem2);
+            sem_getvalue(sem2, &val);
+        }
+        sem_post(sem2);
+        printf("OK2\n");
+
+        sem_getvalue(sem3, &val);
+        while (val != network->N_PROCS) {
+            sem_post(sem3);
+            sem_getvalue(sem3, &val);
+        }
+        printf("OK3\n");
+        return 0;
     /// SEMAFORO = 0 -> VOTANTES
     } else {
         printf("Votante\n");
+
         sem_wait(sem3);
         if (sigwait(&network->mask, &sig) == 0) {
             if (sig == SIGUSR2) {
@@ -118,22 +151,30 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
         }
 
         fd = open("PIDS.txt", O_WRONLY | O_APPEND , 0644);  // Abrir archivo para añadir votos en modo sobreescritura
+        if (fd == -1) {
+            perror("Error al abrir el archivo");
+            return EXIT_FAILURE;
+        }
 
         dprintf(fd, "%d vota %c\n", getpid(), answer);
+        fsync(fd);
         close(fd);
 
         sem_post(sem2);
+        printf("Proceso votante terminado\n");
 
-        exit(EXIT_SUCCESS);
+        return 0;
     }
 
 }
 
-int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
+int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, sem_t *sem4, Network *network) {
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
-
     int sig;
+    sigset_t new_mask, old_mask;
+    int current_value, current_value2;
 
+    // Inicializar acciones para las señales
     act_int.sa_handler = handle_sigint;
     sigemptyset(&(act_int.sa_mask));
     act_int.sa_flags = 0;
@@ -154,45 +195,68 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
     sigemptyset(&(act_alarm.sa_mask));
     act_alarm.sa_flags = 0;
 
-    if (sigaction(SIGINT, &act_int, NULL)<0) {
+    // Configurar sigactions
+    if (sigaction(SIGINT, &act_int, NULL) < 0) {
         perror("sigaction");
-        exit(EXIT_FAILURE);
-    }       
-
-    if (sigaction(SIGTERM, &act_term, NULL)<0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }       
-
-    if (sigaction(SIGALRM, &act_alarm, NULL)<0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }       
-
-    if (sigaction(SIGUSR1, &act_usr1, NULL)<0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }       
-
-    if (sigaction(SIGUSR2, &act_usr2, NULL)<0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    } 
-
-    if (sigprocmask(SIG_BLOCK, &network->mask, NULL) != 0) {
-        perror("sigprocmask");
         exit(EXIT_FAILURE);
     }
 
-    if (sigwait(&network->mask, &sig) == 0) {
+    if (sigaction(SIGTERM, &act_term, NULL) < 0) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sigaction(SIGALRM, &act_alarm, NULL) < 0) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sigaction(SIGUSR1, &act_usr1, NULL) < 0) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sigaction(SIGUSR2, &act_usr2, NULL) < 0) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    // Bloquear señales durante las operaciones críticas
+    sigemptyset(&new_mask);
+    sigaddset(&new_mask, SIGUSR1);
+    sigaddset(&new_mask, SIGUSR2);
+    sigaddset(&new_mask, SIGTERM);
+    sigprocmask(SIG_BLOCK, &new_mask, &old_mask);
+
+    // Esperar señales
+    while (1) {
+        sigwait(&network->mask, &sig);
+
         if (sig == SIGUSR1) {
-            printf("pid %d: Recibí SIGUSR1\n", getpid());
-            chooseCandidato(sem1, sem2, sem3, network);
+            printf("PID %d: Recibí SIGUSR1\n", getpid());
+            // Repetir proceso de votación si hay un nuevo votante
+            while (newVotante) {
+                printf("Vuelve a empezar el bucle\n");
+                sem_getvalue(sem4, &current_value);
+                while (current_value > 0) {
+                    sem_getvalue(sem4, &current_value);
+                    usleep(100);
+                }
+                printf("El semáforo 4 se ha puesto a 0");
+                sleep(1);
+                chooseCandidato(sem1, sem2, sem3, sem4, network);
+                printf("Un proceso ha terminado choose\n");
+                sem_wait(sem4);
+                sem_getvalue(sem4, &current_value2);
+                printf("current value: %d\n", current_value2);
+                printf("continua el bucle\n");
+            }
+            printf("Se ha salido del bucle\n");
         }
-    } else {
-        perror("sigwait"); 
-        exit(EXIT_FAILURE);
+
+        // Uso de sigsuspend para esperar señales sin consumir CPU
+        sigsuspend(&old_mask);  // Esperar señal mientras bloqueamos las señales en old_mask
     }
+
     exit(EXIT_SUCCESS);
-    
 }

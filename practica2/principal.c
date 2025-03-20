@@ -12,6 +12,8 @@
 #include "votante.h"
 #include <errno.h>
 
+volatile sig_atomic_t terminar = 0;
+
 void handle_sigint(int sig) {
 
     int fd, num_procesos, pids[MAX_PID];
@@ -38,14 +40,19 @@ void handle_sigint(int sig) {
     char *token = strtok(buffer, "\n");
     num_procesos = atoi(token);
 
-    close(fd);  // Cerrar el fichero
+    for(i= 0; i< num_procesos +1; i++){
+        token = strtok(NULL, " ");
+        pids[i] = atoi(token);
+    }
 
     // Convertir el contenido del archivo en PIDs
-    token = strtok(buffer, "\n");  
+    token = strtok(NULL, "\n");  
     while (token != NULL && num_procesos < MAX_PID) {
         pids[num_procesos++] = atoi(token);  // Convertir a entero
         token = strtok(NULL, "\n");
     }
+
+    close(fd);  // Cerrar el fichero
 
     // Enviar SIGTERM a cada proceso votante
     for (int i = 0; i < num_procesos; i++) {
@@ -55,16 +62,8 @@ void handle_sigint(int sig) {
     }
 
     status_total = EXIT_SUCCESS;
-    for (i=0; i<num_procesos; i++) {
-        printf("%d\n",pids[i]);
-        waitpid(pids[i],&status,0);
-        if (status == EXIT_FAILURE) {
-            status_total = EXIT_FAILURE;
-        }
-    }
 
     /*unlink("PIDS");*/
-    close(fd);
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
@@ -76,20 +75,24 @@ void handle_sigint(int sig) {
 }
 
 void handle_sigterm(int sig) {
+
+    terminar = 1;
     
     /*unlink("PIDS");*/
     unlink("/sem1");
     unlink("/sem2");
-    printf("Freeing...");
+    unlink("/sem3");
+    printf("Proceso %d terminado por SIGTERM\n", getpid());
     exit(EXIT_SUCCESS);
 
 }
 
 void handle_sigalarm(int sig) {
+    terminar = 1;
     int fd, num_procesos, pids[MAX_PID];
     int status, status_total, i;
     printf("Finishing by alarm\n");
-
+    
     fd = open("PIDS.txt", O_RDONLY);
     if (fd == -1) {
         perror("Error al abrir el archivo de PIDs");
@@ -108,37 +111,44 @@ void handle_sigalarm(int sig) {
     buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
     char *token = strtok(buffer, "\n");
     num_procesos = atoi(token);
+
     for(i= 0; i< num_procesos +1; i++){
         token = strtok(NULL, " ");
         pids[i] = atoi(token);
     }
 
+    // Convertir el contenido del archivo en PIDs
+    token = strtok(NULL, "\n");  
+    while (token != NULL && num_procesos < MAX_PID) {
+        pids[num_procesos++] = atoi(token);  // Convertir a entero
+        token = strtok(NULL, "\n");
+    }
+
     close(fd);  // Cerrar el fichero
 
-    status_total = EXIT_SUCCESS;
-    for (i=0; i<num_procesos; i++) {
-        waitpid(pids[i],&status,0);
-        if (status == EXIT_FAILURE) {
-            status_total = EXIT_FAILURE;
+    // Enviar SIGTERM a cada proceso votante
+    for (int i = 0; i < num_procesos; i++) {
+        if (kill(pids[i], SIGTERM) == -1) {
+            perror("Error al enviar SIGTERM");
         }
     }
 
+    status_total = EXIT_SUCCESS;
+
     /*unlink("PIDS");*/
-    close(fd);
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
-
     if(status_total == EXIT_SUCCESS) {
         exit(EXIT_SUCCESS);
     } else {
         exit(EXIT_FAILURE);
     }
-
+    
 }
 
 void handle_sigusr1(int sig) {
-    printf("Recibido SIGUSR1 en el manejador\n");
+    printf("Recibido SIGUSR1 en el manejador");
 }
 
 void handle_sigusr2(int sig) {
@@ -151,6 +161,7 @@ int main (int argc, char *argv[]){
     sem_t *sem1 = NULL;
     sem_t *sem2 = NULL;
     sem_t *sem3 = NULL;
+    sem_t *sem4 = NULL;
     int val2;
 
     // INICIALIZAR HANDLES
@@ -235,6 +246,7 @@ int main (int argc, char *argv[]){
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
+    sem_unlink("/sem4");
 
     // INICIALIZAR LOS SEMÁFOROS
     if((sem1 = sem_open("/sem1", O_CREAT, 0644, 0))==SEM_FAILED) {
@@ -254,8 +266,13 @@ int main (int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
     sem_getvalue(sem3, &val2);
-        printf("INICIAL%d\n",val2);
+    printf("INICIAL%d\n",val2);
 
+    // INICIALIZAR LOS SEMÁFOROS
+    if((sem4 = sem_open("/sem4", O_CREAT, 0644, 0))==SEM_FAILED) {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
     // ABRIR FICHERO CON LOS PIDS
     fd = open("PIDS.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
     dprintf(fd, "%d\n", network.N_PROCS);
@@ -267,7 +284,7 @@ int main (int argc, char *argv[]){
             perror("fork");
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
-            votante(sem1, sem2, sem3, &network);
+            votante(sem1, sem2, sem3, sem4, &network);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
@@ -293,8 +310,7 @@ int main (int argc, char *argv[]){
         }
     }
 
-    while(1);
-
+    while (!terminar);
     
     return status_total;
 }

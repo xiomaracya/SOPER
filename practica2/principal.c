@@ -88,7 +88,6 @@ void handle_sigterm(int sig) {
 }
 
 void handle_sigalarm(int sig) {
-    terminar = 1;
     int fd, num_procesos, pids[MAX_PID];
     int status, status_total, i;
     printf("Finishing by alarm\n");
@@ -161,28 +160,27 @@ int main (int argc, char *argv[]){
     sem_t *sem1 = NULL;
     sem_t *sem2 = NULL;
     sem_t *sem3 = NULL;
-    sem_t *sem4 = NULL;
-    int val2;
+    int val2, nProc, nSec;
 
     // INICIALIZAR HANDLES
     int i, fd;
     pid_t pid;
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
-    Network network;
     sigset_t mask;
     int status, status_total;
+    int pids[MAX_PID];
 
     if(argc==3) {
-        network.N_PROCS = atoi(argv[1]);
-        network.N_SECS = atoi(argv[2]);
+        nProc = atoi(argv[1]);
+        nSec = atoi(argv[2]);
     }
 
     // CONTROL DE PARÁMETROS
-    if (argc != 3 || network.N_PROCS < 1 || network.N_SECS < 1) {
-        while(network.N_PROCS < 1 || network.N_SECS < 1){
+    if (argc != 3 || nProc < 1 || nSec < 1) {
+        while(nProc < 1 || nSec < 1){
         
             printf("Error al introducir los parámetros, vuelve a intentarlo.\n");
-            scanf("%d %d", &network.N_PROCS, &network.N_SECS);
+            scanf("%d %d", &nProc, &nSec);
             
         }
     }
@@ -193,7 +191,6 @@ int main (int argc, char *argv[]){
     sigaddset(&mask, SIGTERM);
     sigaddset(&mask, SIGUSR1);
     sigaddset(&mask, SIGUSR2);
-    network.mask = mask;
 
     act_int.sa_handler = handle_sigint;
     sigemptyset(&(act_int.sa_mask));
@@ -241,12 +238,11 @@ int main (int argc, char *argv[]){
     }       
 
     // ALARM
-    alarm(network.N_SECS);
+    alarm(nSec);
 
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
-    sem_unlink("/sem4");
 
     // INICIALIZAR LOS SEMÁFOROS
     if((sem1 = sem_open("/sem1", O_CREAT, 0644, 0))==SEM_FAILED) {
@@ -261,40 +257,39 @@ int main (int argc, char *argv[]){
     }
     sem_post(sem2);
 
-    if((sem3 = sem_open("/sem3", O_CREAT, 0644, network.N_PROCS))==SEM_FAILED) {
+    if((sem3 = sem_open("/sem3", O_CREAT, 0644, nProc))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_getvalue(sem3, &val2);
     printf("INICIAL%d\n",val2);
 
-    // INICIALIZAR LOS SEMÁFOROS
-    if((sem4 = sem_open("/sem4", O_CREAT, 0644, 0))==SEM_FAILED) {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
     // ABRIR FICHERO CON LOS PIDS
-    fd = open("PIDS.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    dprintf(fd, "%d\n", network.N_PROCS);
+    fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    dprintf(fd, "%d\n", nProc);
 
     /// CREAR PROCESOS VOTANTES
-    for (i = 0; i< network.N_PROCS + 1; i++){
+    for (i = 0; i< nProc + 1; i++){
         pid= fork();
         if (pid < 0) {
             perror("fork");
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
-            votante(sem1, sem2, sem3, sem4, &network);
+            votante(fd, sem1, sem2, sem3, nProc, mask);
             exit(EXIT_SUCCESS);
         } else {
             // Proceso principal guarda el PID del votante
-            network.pid[i] = pid;
+            pids[i] = pid;
         }
     }
 
+    for (i=0; i<nProc; i++) {
+        printf("pid %d: %d\n", i, pids[i]);
+    }
+
     // ESCRIBIR EN EL FICHERO LOS PID
-    for (i = 0; i<network.N_PROCS+1; i++){
-        if(dprintf(fd, "%d ", network.pid[i]) == -1) {
+    for (i = 0; i<nProc+1; i++){
+        if(dprintf(fd, "%d ", pids[i]) == -1) {
             return EXIT_FAILURE;
         }
     }
@@ -303,8 +298,8 @@ int main (int argc, char *argv[]){
     close(fd);
 
     // ENVIAR SEÑALES A VOTANTES
-    for (int i = 0; i < network.N_PROCS+1; i++) {
-        if(kill(network.pid[i], SIGUSR1) == -1) {
+    for (int i = 0; i < nProc+1; i++) {
+        if(kill(pids[i], SIGUSR1) == -1) {
             perror("kill");
             return EXIT_FAILURE;
         }

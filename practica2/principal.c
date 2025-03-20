@@ -12,7 +12,11 @@
 #include "votante.h"
 #include <errno.h>
 
+static volatile sig_atomic_t got_signal = 0;
+
 void handle_sigint(int sig) {
+
+    got_signal = 1;
 
     int fd, num_procesos, pids[MAX_PID];
     int status, status_total, i;
@@ -41,7 +45,7 @@ void handle_sigint(int sig) {
     close(fd);  // Cerrar el fichero
 
     // Convertir el contenido del archivo en PIDs
-    token = strtok(buffer, "\n");  
+    token = strtok(NULL, "\n");  
     while (token != NULL && num_procesos < MAX_PID) {
         pids[num_procesos++] = atoi(token);  // Convertir a entero
         token = strtok(NULL, "\n");
@@ -65,9 +69,6 @@ void handle_sigint(int sig) {
 
     /*unlink("PIDS");*/
     close(fd);
-    sem_unlink("/sem1");
-    sem_unlink("/sem2");
-    sem_unlink("/sem3");
     if(status_total == EXIT_SUCCESS) {
         exit(EXIT_SUCCESS);
     } else {
@@ -78,8 +79,9 @@ void handle_sigint(int sig) {
 void handle_sigterm(int sig) {
     
     /*unlink("PIDS");*/
-    unlink("/sem1");
-    unlink("/sem2");
+    sem_unlink("/sem1");
+    sem_unlink("/sem2");
+    sem_unlink("/sem3");
     printf("Freeing...");
     exit(EXIT_SUCCESS);
 
@@ -108,9 +110,22 @@ void handle_sigalarm(int sig) {
     buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
     char *token = strtok(buffer, "\n");
     num_procesos = atoi(token);
-    for(i= 0; i< num_procesos +1; i++){
-        token = strtok(NULL, " ");
-        pids[i] = atoi(token);
+
+    close(fd);  // Cerrar el fichero
+
+    // Convertir el contenido del archivo en PIDs
+    token = strtok(NULL, "\n");  
+    while (token != NULL && num_procesos < MAX_PID) {
+        pids[num_procesos++] = atoi(token);  // Convertir a entero
+        token = strtok(NULL, "\n");
+    }
+
+    // Enviar SIGTERM a cada proceso votante
+    for (int i = 0; i < num_procesos; i++) {
+        printf("pid: %d", pids[i]);
+        if (kill(pids[i], SIGTERM) == -1) {
+            perror("Error al enviar SIGTERM");
+        }
     }
 
     close(fd);  // Cerrar el fichero
@@ -293,7 +308,9 @@ int main (int argc, char *argv[]){
         }
     }
 
-    while(1);
+    while(!got_signal);
+
+    handle_sigint(SIGINT);
 
     
     return status_total;

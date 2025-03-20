@@ -10,6 +10,9 @@
 #include <semaphore.h>
 #include <time.h>
 #include <errno.h>
+#include <fcntl.h>
+
+static volatile sig_atomic_t got_signal2 = 0;
 
 int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
 
@@ -35,7 +38,7 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
             }
         }
 
-        fd = open("PIDS.txt", O_CREAT | O_RDONLY, 0644);
+        fd = open("PIDS.txt", O_RDONLY, 0644);
         while (flag==0) {
             flag = 1;
             bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
@@ -91,11 +94,14 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
                 perror("Error al enviar SIGUSR1");
             }
         }
-
         sem_close(sem1);
         sem_close(sem2);
         sem_close(sem3);
-        exit(EXIT_SUCCESS);
+        sem_unlink("/sem1");
+        sem_unlink("/sem2");
+        sem_unlink("/sem3");
+        printf("Sale candidato\n");
+        return 0;
     /// SEMAFORO = 0 -> VOTANTES
     } else {
         printf("Votante\n");
@@ -124,7 +130,15 @@ int chooseCandidato(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network){
 
         sem_post(sem2);
 
-        exit(EXIT_SUCCESS);
+        if (sigwait(&network->mask, &sig) == 0) {
+            if (sig == SIGUSR1) {
+                printf("pid %d: Recibí SIGUSR1\n", getpid());
+                chooseCandidato(sem1, sem2, sem3, network);
+            }
+        }
+        printf("Sale votante\n");
+
+        return 0;
     }
 
 }
@@ -133,6 +147,8 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
 
     int sig;
+
+    got_signal2 = 1;
 
     act_int.sa_handler = handle_sigint;
     sigemptyset(&(act_int.sa_mask));
@@ -187,7 +203,27 @@ int votante(sem_t *sem1, sem_t *sem2, sem_t *sem3, Network *network) {
     if (sigwait(&network->mask, &sig) == 0) {
         if (sig == SIGUSR1) {
             printf("pid %d: Recibí SIGUSR1\n", getpid());
-            chooseCandidato(sem1, sem2, sem3, network);
+            while (1) {
+                chooseCandidato(sem1, sem2, sem3, network);
+                sleep(0.25);
+                if((sem1 = sem_open("/sem1", O_CREAT, 0644, 0))==SEM_FAILED) {
+                    perror("sem_open");
+                    exit(EXIT_FAILURE);
+                }
+                sem_post(sem1);
+            
+                if((sem2 = sem_open("/sem2", O_CREAT, 0644, 0))==SEM_FAILED) {
+                    perror("sem_open");
+                    exit(EXIT_FAILURE);
+                }
+                sem_post(sem2);
+            
+                if((sem3 = sem_open("/sem3", O_CREAT, 0644, network->N_PROCS))==SEM_FAILED) {
+                    perror("sem_open");
+                    exit(EXIT_FAILURE);
+                }
+                printf("FIN\n");
+            }
         }
     } else {
         perror("sigwait"); 

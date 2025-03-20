@@ -54,7 +54,7 @@ int *readpids(int fd, int *nProc) {
 }
 
 char *readvotes(int fd, int *nProc, int *ronda) {
-    int i, j;
+    int i, j, flag;
 
     int bytes_leidos;
     char buffer[1024], *token;
@@ -84,7 +84,6 @@ char *readvotes(int fd, int *nProc, int *ronda) {
         close(fd);
         free(pids);
         free(votes);
-        close(fd);
         return NULL;
     }
     buffer[bytes_leidos] = '\0'; 
@@ -95,15 +94,50 @@ char *readvotes(int fd, int *nProc, int *ronda) {
     for(i= 0; i< *nProc; i++){
         token = strtok(NULL, " ");
         pids[i] = atoi(token);
+        printf("pid %d %d", i, pids[i]);
     }
     token = strtok(NULL, "\n");
     pids[i] = atoi(token);
-    for(j=0; j < *ronda; j++){
-        for (i = 0; i < *nProc-1 && token != NULL; i++) {
+    printf("pids[i]: %d\n", pids[i]);
+
+    flag=1;
+    while (flag==1) {
+        flag=0;
+        for(j=0; j < *ronda-1; j++){
+            printf("ronda %d", *ronda);
+            printf("nproc %d", *nProc);
+            for (i = 0; i < *nProc && token != NULL; i++) {
+                token = strtok(NULL, " ");  // Coge el pid
+                printf("token1: %s\n", token);
+                token = strtok(NULL, " ");  // Coge la palabra "vota"
+                printf("token2: %s\n", token);
+                token = strtok(NULL, "\n");  // Dividir por espacios
+                printf("token3: %s\n", token);
+                votes[i] = token[0];  // Almacenar el voto (Y o N)
+            }
+        }
+        printf("ronda %d", *ronda);
+        printf("nproc %d", *nProc);
+        for (i = 0; i < *nProc && token != NULL; i++) {
             token = strtok(NULL, " ");  // Coge el pid
-            token = strtok(NULL, " ");  // Coge la palabra "vota"
-            token = strtok(NULL, "\n");  // Dividir por espacios
-            votes[i] = token[0];  // Almacenar el voto (Y o N)
+            if(token == NULL) {
+                flag = 1;
+            } else {
+                printf("token1: %s\n", token);
+                token = strtok(NULL, " ");  // Coge la palabra "vota"
+                if (token == NULL) {
+                    flag = 1;
+                } else {
+                    printf("token2: %s\n", token);
+                    token = strtok(NULL, "\n");  // Dividir por espacios
+                    if (token == NULL) {
+                        flag=1;
+                    } else {
+                        printf("token3: %s\n", token);
+                        votes[i] = token[0];  // Almacenar el voto (Y o N)
+                    }
+                }
+            }
         }
     }
 
@@ -125,6 +159,7 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
     }
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
+        printf("CANDIDATO\n");
 
         sem_getvalue(sem3, &val);
         while (val>0) {
@@ -134,8 +169,8 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         for (int i = 0; i < nProc+1; i++) {
             newVotante = 0;
             if(pids[i] != getpid()) {
-                fflush(stdout);
                 kill(pids[i], SIGUSR2);
+                printf("Se ha enviado la señal 2\n");
             }
         }
 
@@ -143,6 +178,7 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
 
         votes = readvotes(fd, &nProc, ronda);
         usleep(1000);
+        close(fd);
 
         printf("Candidate %d => [", getpid());
         for (int i = 0; i < nProc; i++) {

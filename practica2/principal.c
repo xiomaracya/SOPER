@@ -146,7 +146,7 @@ int main (int argc, char *argv[]){
     sem_t *sem1 = NULL;
     sem_t *sem2 = NULL;
     sem_t *sem3 = NULL;
-    int val2, nProc, nSec;
+    int val2, nProc=0, nSec=0;
 
     // INICIALIZAR HANDLES
     int i, fd;

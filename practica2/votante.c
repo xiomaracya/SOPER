@@ -20,6 +20,9 @@
 #include <time.h>
 #include <errno.h>
 
+/**
+ * @brief Bandera utilizada para controlar si se puede crear un nuevo Votante
+ */
 volatile sig_atomic_t newVotante = 1;
 
 

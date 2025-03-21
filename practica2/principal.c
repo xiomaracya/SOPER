@@ -22,6 +22,9 @@
 #include <errno.h>
 #include "votante.h"
 
+/**
+ * @brief Bandera utilizada para controlar si el programa debe terminar
+ */
 volatile sig_atomic_t terminar = 0;
 
 

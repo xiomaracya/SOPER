@@ -119,7 +119,7 @@ void handle_sigalarm(int sig) {
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
-    //unlink(FICHERO);
+    unlink(FICHERO);
     exit(EXIT_SUCCESS);
     
 }

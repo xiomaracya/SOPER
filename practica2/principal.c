@@ -44,8 +44,10 @@ void handle_sigint(int sig) {
     }
 
     if(getpid() == pids[0]) {
-        printf("Finishing by signal");
+        printf("Finishing by signal\n");
     }
+    fflush(stdout);
+    usleep(250000);
 
     close(fd);  // Cerrar el fichero
 
@@ -162,10 +164,17 @@ int main (int argc, char *argv[]){
     }
 
     // CONTROL DE PARÁMETROS
-    if (argc != 3 || nProc < 1 || nSec < 1) {
-        while(nProc < 1 || nSec < 1){
+    if (argc != 3 || nProc < 1 || nSec < 1 || nProc >= MAX_PID) {
+        while(nProc < 1 || nSec < 1|| nProc >=  MAX_PID){
         
             printf("Error al introducir los parámetros, vuelve a intentarlo.\n");
+            if(nProc < 1 || nProc >= MAX_PID){
+                printf("El número de votantes debe encontrar entre 1 y 29\n");
+            }
+            if(nSec < 1){
+                printf("Los segundos deben ser mayor que 0\n");
+            }
+            
             scanf("%d %d", &nProc, &nSec);
             
         }
@@ -231,26 +240,26 @@ int main (int argc, char *argv[]){
     sem_unlink("/sem3");
 
     // INICIALIZAR LOS SEMÁFOROS
-    if((sem1 = sem_open("/sem1", O_CREAT, 0644, 0))==SEM_FAILED) {
+    if((sem1 = sem_open("/sem1", O_CREAT, S_IRUSR | S_IWUSR, 0))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(sem1);
 
-    if((sem2 = sem_open("/sem2", O_CREAT, 0644, 0))==SEM_FAILED) {
+    if((sem2 = sem_open("/sem2", O_CREAT, S_IRUSR | S_IWUSR, 0))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(sem2);
 
-    if((sem3 = sem_open("/sem3", O_CREAT, 0644, nProc))==SEM_FAILED) {
+    if((sem3 = sem_open("/sem3", O_CREAT, S_IRUSR | S_IWUSR, nProc))==SEM_FAILED) {
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_getvalue(sem3, &val2);
 
     // ABRIR FICHERO CON LOS PIDS
-    fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
     dprintf(fd, "%d\n", nProc);
 
     /// CREAR PROCESOS VOTANTES

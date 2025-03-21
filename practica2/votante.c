@@ -35,7 +35,7 @@ int *readpids(int fd, int *nProc) {
         return NULL;
     }
 
-    fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
+    fd = open(FICHERO, O_CREAT | O_RDONLY, S_IRUSR | S_IWUSR);
     if(fd == -1) {
         perror("open");
         free(pids);
@@ -96,7 +96,7 @@ char *readvotes(int fd, int *nProc, int *ronda) {
         return NULL;
     }
 
-    fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
+    fd = open(FICHERO, O_CREAT | O_RDONLY, S_IRUSR | S_IWUSR);
     if(fd == -1) {
         perror("open");
         free(pids);
@@ -180,13 +180,11 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
     if(sem_trywait(sem1) == 0) {
 
         if(sem_getvalue(sem3, &val) == -1) {
-            perror("sem_getvalue");
             free(pids);
             return 1;
         }
         while (val>0) {
             if(sem_getvalue(sem3, &val) == -1) {
-                perror("sem_getvalue");
                 free(pids);
                 return 1;
             }
@@ -203,7 +201,7 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
             }
         }
 
-        fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
+        fd = open(FICHERO, O_CREAT | O_RDONLY, S_IRUSR | S_IWUSR);
         if(fd == -1) {
             perror("open");
             free(pids);
@@ -257,7 +255,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         newVotante = 1;
 
         if(sem_getvalue(sem2, &val) == -1) {
-            perror("sem_getvalue");
             free(pids);
             free(votes);
             close(fd);
@@ -266,7 +263,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         while (val != 0) {
             sem_wait(sem2);
             if(sem_getvalue(sem2, &val) == -1) {
-                perror("sem_getvalue");
                 free(pids);
                 free(votes);
                 close(fd);
@@ -276,7 +272,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         sem_post(sem2);
 
         if(sem_getvalue(sem3, &val) == -1) {
-            perror("sem_getvalue");
             free(pids);
             free(votes);
             close(fd);
@@ -285,7 +280,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         while (val != nProc) {
             sem_post(sem3);
             if(sem_getvalue(sem3, &val) == -1) {
-                perror("sem_getvalue");
                 free(pids);
                 free(votes);
                 close(fd);
@@ -296,7 +290,6 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         // Enviar SIGUSR1 a cada proceso votante no candidato
         for (int i = 0; i < nProc + 1; i++) {
             if (kill(pids[i], SIGUSR1) == -1) {
-                perror("sem_getvalue");
                 free(pids);
                 free(votes);
                 close(fd);
@@ -328,7 +321,7 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
             answer = 'Y';
         }
 
-        fd = open(FICHERO, O_WRONLY | O_APPEND , 0644);  // Abrir archivo para añadir votos en modo sobreescritura
+        fd = open(FICHERO, O_WRONLY | O_APPEND , S_IRUSR | S_IWUSR);  // Abrir archivo para añadir votos en modo sobreescritura
         if (fd == -1) {
             perror("open");
             free(pids);

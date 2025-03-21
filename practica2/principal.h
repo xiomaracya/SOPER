@@ -16,7 +16,14 @@
 #include <unistd.h>
 #include <errno.h>
 
+/**
+ * @brief Número máximo de procesos votantes que se pueden crear
+ */
 #define MAX_PID 30
+
+/**
+ * @brief Nombre del fichero donde se almacenan los datos
+ */
 #define FICHERO "PIDS.txt"
 
 #ifndef PRINCIPAL_H

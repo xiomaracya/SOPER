@@ -20,40 +20,28 @@
 #include <semaphore.h>
 #include "votante.h"
 #include <errno.h>
+#include "votante.h"
 
 volatile sig_atomic_t terminar = 0;
 
 
 void handle_sigint(int sig) {
     (void)sig;
-    int fd, num_procesos, pids[MAX_PID];
-    int status_total, i;
+    int fd, num_procesos=0, *pids=NULL;
+    int i;
     
     fd = open("PIDS.txt", O_RDONLY);
     if (fd == -1) {
-        perror("Error al abrir el archivo de PIDs");
+        perror("open");
         exit(EXIT_FAILURE);
     }
 
-    // Leer los PIDs del fichero
-    char buffer[256];  // Buffer temporal para leer el archivo
-    long int bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
-    if (bytes_leidos <= 0) {
-        perror("Error al leer el archivo de PIDs");
-        close(fd);
+
+    pids = readpids(fd, &num_procesos);
+    if(pids == NULL) {
+        perror("readpids");
         exit(EXIT_FAILURE);
     }
-
-    buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
-    char *token = strtok(buffer, "\n");
-    num_procesos = atoi(token);
-
-    for(i= 0; i< num_procesos +1; i++){
-        token = strtok(NULL, " ");
-        pids[i] = atoi(token);
-    }
-
-    // Convertir el contenido del archivo en PIDs
 
     if(getpid() == pids[0]) {
         printf("Finishing by signal");
@@ -61,19 +49,27 @@ void handle_sigint(int sig) {
 
     close(fd);  // Cerrar el fichero
 
-    status_total = EXIT_SUCCESS;
+    for (i = 0; i < num_procesos+1; i++) {
+        if (kill(pids[i], SIGTERM) == -1) {
+            perror("kill");
+            free(pids);
+            exit(EXIT_FAILURE);
+        }
+    }
 
-    /*unlink("PIDS");*/
+    for (i = 0; i < num_procesos+1; i++) {
+        wait(NULL);
+    }
+
+    free(pids);
+
+    unlink(FICHERO);
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
 
-    unlink(FICHERO);
-    if(status_total == EXIT_SUCCESS) {
-        exit(EXIT_SUCCESS);
-    } else {
-        exit(EXIT_FAILURE);
-    }
+    //unlink(FICHERO);
+    exit(EXIT_SUCCESS);
 }
 
 
@@ -92,8 +88,8 @@ void handle_sigterm(int sig) {
 
 void handle_sigalarm(int sig) {
     (void)sig;
-    int fd, num_procesos, pids[MAX_PID];
-    int status_total, i;
+    int fd, num_procesos=0, *pids=NULL;
+    int i;
     printf("Finishing by alarm\n");
     
     fd = open("PIDS.txt", O_RDONLY);
@@ -102,52 +98,29 @@ void handle_sigalarm(int sig) {
         exit(EXIT_FAILURE);
     }
 
-    // Leer los PIDs del fichero
-    char buffer[256];  // Buffer temporal para leer el archivo
-    long int bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
-    if (bytes_leidos <= 0) {
-        perror("Error al leer el archivo de PIDs");
-        close(fd);
+    pids = readpids(fd, &num_procesos);
+    if(pids == NULL) {
+        perror("readpids");
         exit(EXIT_FAILURE);
-    }
-
-    buffer[bytes_leidos] = '\0';  // Asegurar terminación de cadena
-    char *token = strtok(buffer, "\n");
-    num_procesos = atoi(token);
-
-    for(i= 0; i< num_procesos +1; i++){
-        token = strtok(NULL, " ");
-        pids[i] = atoi(token);
-    }
-
-    // Convertir el contenido del archivo en PIDs
-    token = strtok(NULL, "\n");  
-    while (token != NULL && num_procesos < MAX_PID) {
-        pids[num_procesos++] = atoi(token);  // Convertir a entero
-        token = strtok(NULL, "\n");
     }
 
     close(fd);  // Cerrar el fichero
 
     // Enviar SIGTERM a cada proceso votante
-    for (int i = 0; i < num_procesos; i++) {
+    for (i = 0; i < num_procesos; i++) {
         if (kill(pids[i], SIGTERM) == -1) {
-            perror("Error al enviar SIGTERM");
+            perror("kill");
+            free(pids);
+            exit(EXIT_FAILURE);
         }
     }
 
-    status_total = EXIT_SUCCESS;
 
-    /*unlink("PIDS");*/
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
-    unlink(FICHERO);
-    if(status_total == EXIT_SUCCESS) {
-        exit(EXIT_SUCCESS);
-    } else {
-        exit(EXIT_FAILURE);
-    }
+    //unlink(FICHERO);
+    exit(EXIT_SUCCESS);
     
 }
 
@@ -306,7 +279,7 @@ int main (int argc, char *argv[]){
     close(fd);
 
     // ENVIAR SEÑALES A VOTANTES
-    for (int i = 0; i < nProc+1; i++) {
+    for (i = 0; i < nProc+1; i++) {
         if(kill(pids[i], SIGUSR1) == -1) {
             perror("kill");
             return EXIT_FAILURE;

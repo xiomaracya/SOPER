@@ -1,3 +1,12 @@
+/**
+ * @brief Ejecutará el procedimiento de los procesos votante, tanto en caso de que un proceso se elija como candidato, como si tiene que escribir su voto en el fichero
+ * 
+ * @file principal.calloc
+ * @author Xiomara Caballero Cuya, Sara Serrano Marazuela
+ * @version 1.0
+ * @date 17/03/2025
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +22,7 @@
 
 volatile sig_atomic_t newVotante = 1;
 
+
 int *readpids(int fd, int *nProc) {
     int i;
 
@@ -21,18 +31,19 @@ int *readpids(int fd, int *nProc) {
 
     int *pids = (int*)malloc(MAX_PID*sizeof(int));
     if (pids == NULL) {
+        perror("malloc");
         return NULL;
     }
 
     fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
     if(fd == -1) {
+        perror("open");
         free(pids);
         return NULL;
     }
     bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
     if(bytes_leidos == -1) {
-        perror("Error al leer el archivo");
-        close(fd);
+        perror("read");
         free(pids);
         close(fd);
         return NULL;
@@ -44,7 +55,19 @@ int *readpids(int fd, int *nProc) {
     *nProc = atoi(token);
     for(i= 0; i< *nProc +1; i++){
         token = strtok(NULL, " ");
+        if(token == NULL) {
+            perror("strtok");
+            free(pids);
+            close(fd);
+            return NULL;
+        }
         pids[i] = atoi(token);
+        if(pids[i]<0) {
+            perror("atoi");
+            free(pids);
+            close(fd);
+            return NULL;
+        }
     }
 
     close(fd);
@@ -52,6 +75,7 @@ int *readpids(int fd, int *nProc) {
     return pids;
 
 }
+
 
 char *readvotes(int fd, int *nProc, int *ronda) {
     int i, j, flag;
@@ -61,17 +85,20 @@ char *readvotes(int fd, int *nProc, int *ronda) {
 
     int *pids = (int*)malloc(MAX_PID*sizeof(int));
     if (pids == NULL) {
+        perror("malloc");
         return NULL;
     }
 
     char *votes = (char*)malloc(MAX_PID*sizeof(char));
     if(votes == NULL) {
+        perror("malloc");
         free(pids);
         return NULL;
     }
 
     fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
     if(fd == -1) {
+        perror("open");
         free(pids);
         free(votes);
         return NULL;
@@ -80,7 +107,7 @@ char *readvotes(int fd, int *nProc, int *ronda) {
     /*ronda = *ronda + 1;*/
     bytes_leidos = read(fd, buffer, sizeof(buffer) - 1);
     if(bytes_leidos == -1) {
-        perror("Error al leer el archivo");
+        perror("read");
         close(fd);
         free(pids);
         free(votes);
@@ -129,44 +156,71 @@ char *readvotes(int fd, int *nProc, int *ronda) {
         }
     }
 
+    free(pids);
+    close(fd);
     return votes;
 
 }
+
 
 int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, sigset_t mask, int *ronda){
     char answer;
     int i;
     int yes = 0, no = 0;
-    int sig, val, *pids;
-    char *votes;
+    int sig, val, *pids = NULL;
+    char *votes = NULL;
 
     // LEEMOS LOS PIDS DEL FICHERO
     pids = readpids(fd, &nProc);
     if(pids == NULL) {
+        perror("readpids");
         return 1;
     }
     // SEMÁFORO = 1 -> CANDIDATO
     if(sem_trywait(sem1) == 0) {
 
-        sem_getvalue(sem3, &val);
+        if(sem_getvalue(sem3, &val) == -1) {
+            perror("sem_getvalue");
+            free(pids);
+            return 1;
+        }
         while (val>0) {
-            sem_getvalue(sem3, &val);
+            if(sem_getvalue(sem3, &val) == -1) {
+                perror("sem_getvalue");
+                free(pids);
+                return 1;
+            }
         }
 
         for (int i = 0; i < nProc+1; i++) {
             newVotante = 0;
             if(pids[i] != getpid()) {
-                kill(pids[i], SIGUSR2);
+                if(kill(pids[i], SIGUSR2) == -1) {
+                    perror("kill");
+                    free(pids);
+                    return 1;
+                }
             }
         }
 
         fd = open(FICHERO, O_CREAT | O_RDONLY, 0644);
+        if(fd == -1) {
+            perror("open");
+            free(pids);
+            return 1;
+        }
 
         int escrito = 0;
 
         while(escrito==0){
             escrito = 1;
             votes = readvotes(fd, &nProc, ronda);
+            if(votes == NULL) {
+                perror("readvotes");
+                free(pids);
+                close(fd);
+                return 1;
+            }
             for (i =0; i<nProc; i++){
                 if (votes[i] != 'Y' && votes[i] != 'N'){
                     escrito = 0;
@@ -202,26 +256,56 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
 
         newVotante = 1;
 
-        sem_getvalue(sem2, &val);
+        if(sem_getvalue(sem2, &val) == -1) {
+            perror("sem_getvalue");
+            free(pids);
+            free(votes);
+            close(fd);
+            return 1;
+        }
         while (val != 0) {
             sem_wait(sem2);
-            sem_getvalue(sem2, &val);
+            if(sem_getvalue(sem2, &val) == -1) {
+                perror("sem_getvalue");
+                free(pids);
+                free(votes);
+                close(fd);
+                return 1;
+            }
         }
         sem_post(sem2);
 
-        sem_getvalue(sem3, &val);
+        if(sem_getvalue(sem3, &val) == -1) {
+            perror("sem_getvalue");
+            free(pids);
+            free(votes);
+            close(fd);
+            return 1;
+        }
         while (val != nProc) {
             sem_post(sem3);
-            sem_getvalue(sem3, &val);
+            if(sem_getvalue(sem3, &val) == -1) {
+                perror("sem_getvalue");
+                free(pids);
+                free(votes);
+                close(fd);
+                return 1;
+            }
         }
 
         // Enviar SIGUSR1 a cada proceso votante no candidato
         for (int i = 0; i < nProc + 1; i++) {
             if (kill(pids[i], SIGUSR1) == -1) {
-                perror("Error al enviar SIGUSR1");
+                perror("sem_getvalue");
+                free(pids);
+                free(votes);
+                close(fd);
+                return 1;
             }
         }
 
+        free(pids);
+        free(votes);
         sem_post(sem1);
         return 0;
     /// SEMAFORO = 0 -> VOTANTES
@@ -229,12 +313,11 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
 
         sem_wait(sem3);
         sigaddset(&mask, SIGUSR2);
-        if (sigwait(&mask, &sig) == 0) {
-            if (sig == SIGUSR2) {
-            }
-        } else {
+        if (sigwait(&mask, &sig) != 0) {
             perror("sigwait"); 
-            exit(EXIT_FAILURE);
+            free(pids);
+            close(fd);
+            return 1;
         }
         sem_wait(sem2);
 
@@ -247,30 +330,32 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
 
         fd = open(FICHERO, O_WRONLY | O_APPEND , 0644);  // Abrir archivo para añadir votos en modo sobreescritura
         if (fd == -1) {
-            perror("Error al abrir el archivo");
+            perror("open");
+            free(pids);
+            close(fd);
             return EXIT_FAILURE;
         }
 
         dprintf(fd, "%d vota %c\n", getpid(), answer);
-        fsync(fd);
         close(fd);
 
         sem_post(sem2);
 
         sigdelset(&mask, SIGUSR2);
-        if (sigwait(&mask, &sig) == 0) {
-            if (sig == SIGUSR1) {
-
-            }
-        } else {
+        if (sigwait(&mask, &sig) != 0) {
             perror("sigwait"); 
+            free(pids);
+            close(fd);
             exit(EXIT_FAILURE);
         }
 
+        free(pids);
+        free(votes);
         return 0;
     }
 
 }
+
 
 int votante(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, sigset_t mask) {
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
@@ -339,18 +424,10 @@ int votante(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, sigset_t m
             // Repetir proceso de votación si hay un nuevo votante
             while (newVotante) {
                 sleep(1);
-                /*unlink("PIDS.txt");
-                fd = open(FICHERO, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-                dprintf(fd, "%d\n", n);
-                for (i = 0; i<nProc+1; i++){
-                    if(dprintf(fd, "%d ", pids[i]) == -1) {
-                        return EXIT_FAILURE;
-                    }
-                }
-                dprintf(fd, "\n");
-                close(fd);*/
                 ronda ++;
-                chooseCandidato(fd, sem1, sem2, sem3, nProc, mask, &ronda);
+                if(chooseCandidato(fd, sem1, sem2, sem3, nProc, mask, &ronda) == 1) {
+                    exit(EXIT_FAILURE);
+                }
             }
         }
 

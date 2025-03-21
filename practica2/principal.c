@@ -1,3 +1,12 @@
+/**
+ * @brief Creará los procesos votante y controlará si el sistema está listo
+ * 
+ * @file principal.calloc
+ * @author Xiomara Caballero Cuya, Sara Serrano Marazuela
+ * @version 1.0
+ * @date 17/03/2025
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,12 +23,11 @@
 
 volatile sig_atomic_t terminar = 0;
 
+
 void handle_sigint(int sig) {
-
+    (void)sig;
     int fd, num_procesos, pids[MAX_PID];
-    int status, status_total, i;
-
-    printf("Finishing by signal\n");
+    int status_total, i;
     
     fd = open("PIDS.txt", O_RDONLY);
     if (fd == -1) {
@@ -47,6 +55,10 @@ void handle_sigint(int sig) {
 
     // Convertir el contenido del archivo en PIDs
 
+    if(getpid() == pids[0]) {
+        printf("Finishing by signal");
+    }
+
     close(fd);  // Cerrar el fichero
 
     status_total = EXIT_SUCCESS;
@@ -55,6 +67,8 @@ void handle_sigint(int sig) {
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
+
+    unlink(FICHERO);
     if(status_total == EXIT_SUCCESS) {
         exit(EXIT_SUCCESS);
     } else {
@@ -62,8 +76,9 @@ void handle_sigint(int sig) {
     }
 }
 
-void handle_sigterm(int sig) {
 
+void handle_sigterm(int sig) {
+    (void)sig;
     terminar = 1;
     
     /*unlink("PIDS");*/
@@ -74,9 +89,11 @@ void handle_sigterm(int sig) {
 
 }
 
+
 void handle_sigalarm(int sig) {
+    (void)sig;
     int fd, num_procesos, pids[MAX_PID];
-    int status, status_total, i;
+    int status_total, i;
     printf("Finishing by alarm\n");
     
     fd = open("PIDS.txt", O_RDONLY);
@@ -125,6 +142,7 @@ void handle_sigalarm(int sig) {
     sem_unlink("/sem1");
     sem_unlink("/sem2");
     sem_unlink("/sem3");
+    unlink(FICHERO);
     if(status_total == EXIT_SUCCESS) {
         exit(EXIT_SUCCESS);
     } else {
@@ -133,14 +151,24 @@ void handle_sigalarm(int sig) {
     
 }
 
+
 void handle_sigusr1(int sig) {
+    (void)sig;
 }
 
 void handle_sigusr2(int sig) {
-
-
+    (void)sig;
 }
 
+
+/**
+ * @brief Función main
+ * 
+ * Crea los procesos votante
+ * Almacena los pids
+ * Envía SIGUSR1 cuando está lsito
+ * Envía SIGTERM cuando recibe SIGINT o SIGALARM
+ */
 int main (int argc, char *argv[]){
 
     sem_t *sem1 = NULL;
@@ -153,7 +181,6 @@ int main (int argc, char *argv[]){
     pid_t pid;
     struct sigaction act_int, act_usr1, act_usr2, act_term, act_alarm;
     sigset_t mask;
-    int status, status_total;
     int pids[MAX_PID];
 
     if(argc==3) {
@@ -287,6 +314,4 @@ int main (int argc, char *argv[]){
     }
 
     while (!terminar);
-    
-    return status_total;
 }

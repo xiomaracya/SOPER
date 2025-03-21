@@ -238,7 +238,7 @@ int chooseCandidato(int fd, sem_t *sem1, sem_t *sem2, sem_t *sem3, int nProc, si
         }
         sem_wait(sem2);
 
-        srand(getpid());
+        srand(getpid()+time(NULL));
         if(rand() % 2==0) {
             answer = 'N';
         } else {

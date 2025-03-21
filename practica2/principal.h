@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 /**
  * @brief Número máximo de procesos votantes que se pueden crear

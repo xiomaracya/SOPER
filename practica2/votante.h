@@ -15,6 +15,7 @@
 #include "principal.h"
 #include <semaphore.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #ifndef VOTANTE_H
 #define VOTANTE_H

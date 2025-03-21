@@ -21,6 +21,7 @@
 #include "votante.h"
 #include <errno.h>
 #include "votante.h"
+#include <sys/stat.h>
 
 /**
  * @brief Bandera utilizada para controlar si el programa debe terminar
@@ -112,7 +113,7 @@ void handle_sigalarm(int sig) {
     close(fd);  // Cerrar el fichero
 
     // Enviar SIGTERM a cada proceso votante
-    for (i = 0; i < num_procesos; i++) {
+    for (i = 0; i < num_procesos+1; i++) {
         if (kill(pids[i], SIGTERM) == -1) {
             perror("kill");
             free(pids);

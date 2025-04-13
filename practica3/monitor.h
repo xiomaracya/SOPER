@@ -13,6 +13,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#define MAX_BUF 256
+#define MAX_PID 30
+#define SHM_NAME "/minero_shm"
+
+typedef struct {
+    int flag;
+    bool fin;
+} Block;
+
 /**
  * @brief Verify the solution found by Minero
  *

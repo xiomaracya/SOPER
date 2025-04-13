@@ -4,6 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "pow.h"
 #include "minero.h"
 
@@ -107,6 +110,26 @@ void *busqueda(void *arg){
             return NULL;
         }
     }
-    return NULL;
-    
+    return NULL;   
 }
+
+int main(int argc, char* argv[]) {
+    int rondas = 0, lag = 0;
+    if(argc == 3) {
+        rondas = atoi(argv[1]);
+        lag = atoi(argv[2]);
+    } else {
+        printf("Error en los argumentos del ejecutable minero\n");
+        return EXIT_FAILURE;
+    }
+
+    if(rondas<=0 || lag<0) {
+        printf("Error en los argumentos del ejecutable minero\n");
+        return EXIT_FAILURE;
+    }
+
+    // MINERO
+    return EXIT_SUCCESS;
+}
+
+

@@ -29,7 +29,9 @@ int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
     long int objetivo_ronda = objetivo;
     long int solucion;
     long int inicio;
-    char retorno[6];
+
+    printf("[%d] Generating blocks...\n", getpid());
+    fflush(stdout);
 
     for (i=0; i<rondas; i++) {
         solucion = -1;
@@ -60,33 +62,29 @@ int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
             }
         }
         
-        Block *b = malloc(sizeof(Block));
-        b->objetivo = objetivo;
-        b->solucion = solucion;
-        b->fin = false;
-
-        if (mq_send(mq, (const char *)&b, sizeof(Block), 0) == -1) {
-            perror("mq_send");
-            break;
-        }
-
-        if(pow_hash(solucion) == objetivo_ronda) {
-            if(strcmp(retorno, "OK")) {
-                printf("The solution has been invalidated\n");
-                return EXIT_FAILURE;
-            }
+        Block mensaje;
+        memset(&mensaje, 0, sizeof(Block));
+        mensaje.objetivo = objetivo_ronda;
+        mensaje.solucion = solucion;
+        mensaje.flag = false;
+        if(i == rondas-1) {
+            mensaje.fin = true;
         } else {
-            if(strcmp(retorno, "ERROR")) {
-                printf("The solution has been invalidated\n");
-                return EXIT_FAILURE;
-            }
-            return EXIT_FAILURE;
+            mensaje.fin = false;
         }
+
+        if (mq_send(mq,(char*)&mensaje, sizeof(Block), 0) == -1) {
+            perror("mq_send");
+            exit(EXIT_FAILURE);
+        }
+
         objetivo_ronda = solucion;
 
         usleep(lag*1000);
     }
-    return EXIT_SUCCESS;
+    printf("[%d] Finishing\n", getpid());
+    fflush(stdout);
+    exit(EXIT_SUCCESS);
 }
 
 void *busqueda(void *arg){
@@ -136,11 +134,6 @@ int main(int argc, char* argv[]) {
     //realiza el proceso de resolver el pow
 
     proceso_minero(rondas, MAX_THREADS, obj_inicial, mq, lag);
-
-    //Mandar mensaje para que comprobador recbia q ha terminado
-    Block final_bloque = { .objetivo = -1, .solucion = -1, .fin = true };
-
-    mq_send(mq, (const char *)&final_bloque, sizeof(Block), 0);
 
     //Finalizamos y liberamos recursos
     mq_close(mq);

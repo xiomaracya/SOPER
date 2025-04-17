@@ -13,17 +13,31 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <semaphore.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
-#define MAX_BUF 256
+
+#define MAX_BLOCKS 6
 #define MAX_PID 30
 #define SHM_NAME "/minero_shm"
+#define MQ_NAME "/mq"
 
 typedef struct {
-    int objetivo;
-    int solucion;
-    int flag;
+    long int objetivo;
+    long int solucion;
+    bool flag;
     bool fin;
 } Block;
+
+typedef struct {
+    Block buffer[MAX_BLOCKS];
+    int in;
+    int out;
+    sem_t sem_empty;
+    sem_t sem_full;
+    sem_t sem_mutex;
+} MemoriaCompartida;
 
 /**
  * @brief Verify the solution found by Minero

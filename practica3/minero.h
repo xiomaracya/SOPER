@@ -14,6 +14,19 @@
 #include <unistd.h>
 
 /**
+ * Macro del tamaño de la cola de mensane
+ */
+#define MAX_MSG 7
+/**
+ * Macro del nombre de la cola de mensane
+ */
+#define MQ_NAME "/mq"
+/**
+ * Macro del numero de hilos utilizamos en minero
+ */
+#define MAX_THREADS 1
+
+/**
  * @brief Minates a function with a number of thread and rounds
  *
  * @param rondas number of rounds to search a target

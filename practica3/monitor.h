@@ -12,12 +12,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define MAX_BUF 256
 #define MAX_PID 30
 #define SHM_NAME "/minero_shm"
 
 typedef struct {
+    int objetivo;
+    int solucion;
     int flag;
     bool fin;
 } Block;

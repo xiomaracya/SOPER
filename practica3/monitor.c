@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     bool fin = false;
     Block *shm_block;
 
-    if(argc == 3) {
+    if(argc == 2) {
         lag = atoi(argv[1]);
     } else {
         printf("Error en los argumentos del ejecutable minero\n");

@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include "pow.h"
 #include "minero.h"
+#include "monitor.h"
+#include <mqueue.h>
+
 
 typedef struct {
     long int inicio_rango;
@@ -17,9 +20,8 @@ typedef struct {
     long int objetivo;
 } Datos;
 
-int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, int fd_lectura){
+int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
     int i, j, error;
-    int nbytes;
     pthread_t h[hilos];
     Datos datos [hilos];
     long int intervalo = floor((POW_LIMIT+1)/hilos);
@@ -27,8 +29,6 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
     long int objetivo_ronda = objetivo;
     long int solucion;
     long int inicio;
-    char objetivo_char[8];
-    char solucion_char[8];
     char retorno[6];
 
     for (i=0; i<rondas; i++) {
@@ -59,28 +59,15 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
                 return EXIT_FAILURE;
             }
         }
-        if (sprintf(objetivo_char, "%ld", objetivo_ronda) < 0) {
-            perror("sprintf");
-            return EXIT_FAILURE;
-        }
-        if (sprintf(solucion_char, "%ld", solucion) < 0) {
-            perror("sprintf");
-            return EXIT_FAILURE;
-        }
-        nbytes = write(fd_escritura, objetivo_char, sizeof(objetivo_char));
-        if (nbytes == -1) {
-            perror("write");
-            return EXIT_FAILURE;
-        }
-        nbytes = write(fd_escritura, solucion_char, sizeof(solucion_char));
-        if (nbytes == -1) {
-            perror("write");
-            return EXIT_FAILURE;
-        }
-        nbytes = read(fd_lectura, retorno, sizeof(retorno));
-        if (nbytes == -1) {
-            perror("read");
-            return EXIT_FAILURE;
+        
+        Block *b = malloc(sizeof(Block));
+        b->objetivo = objetivo;
+        b->solucion = solucion;
+        b->fin = false;
+
+        if (mq_send(mq, (const char *)&b, sizeof(Block), 0) == -1) {
+            perror("mq_send");
+            break;
         }
 
         if(pow_hash(solucion) == objetivo_ronda) {
@@ -96,6 +83,8 @@ int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, i
             return EXIT_FAILURE;
         }
         objetivo_ronda = solucion;
+
+        usleep(lag*1000);
     }
     return EXIT_SUCCESS;
 }
@@ -115,6 +104,7 @@ void *busqueda(void *arg){
 
 int main(int argc, char* argv[]) {
     int rondas = 0, lag = 0;
+    int obj_inicial = 0;
     if(argc == 3) {
         rondas = atoi(argv[1]);
         lag = atoi(argv[2]);
@@ -129,6 +119,33 @@ int main(int argc, char* argv[]) {
     }
 
     // MINERO
+    //Se crea la cola de mensajes
+    struct mq_attr attributes;
+    mqd_t mq;
+    attributes.mq_flags = 0;
+    attributes.mq_maxmsg = MAX_MSG;
+    attributes.mq_msgsize = sizeof(Block);
+    attributes.mq_curmsgs = 0;
+
+    mq_unlink(MQ_NAME);
+    mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR, &attributes);
+    if (mq == (mqd_t)-1) {
+        perror("mq_open");
+        return EXIT_FAILURE;
+    }
+    //realiza el proceso de resolver el pow
+
+    proceso_minero(rondas, MAX_THREADS, obj_inicial, mq, lag);
+
+    //Mandar mensaje para que comprobador recbia q ha terminado
+    Block final_bloque = { .objetivo = -1, .solucion = -1, .fin = true };
+
+    mq_send(mq, (const char *)&final_bloque, sizeof(Block), 0);
+
+    //Finalizamos y liberamos recursos
+    mq_close(mq);
+    mq_unlink(MQ_NAME);
+
     return EXIT_SUCCESS;
 }
 

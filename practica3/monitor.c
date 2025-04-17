@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
             // Se muestra el bloque por pantalla
 
-            if(pow_hash(mensaje.solucion) == mensaje.objetivo) {
+            if(mensaje.flag==true) {
                 printf("Solution accepted: %08ld --> %08ld\n", mensaje.objetivo, mensaje.solucion);
                 fflush(stdout);
             } else {
@@ -88,12 +88,6 @@ int main(int argc, char* argv[]) {
     } else {
         mqd_t queue;
         Block mensaje;
-        struct mq_attr attributes;
-
-        attributes.mq_flags = 0;
-        attributes.mq_maxmsg = MAX_MSG;
-        attributes.mq_msgsize = sizeof(Block);
-        attributes.mq_curmsgs = 0;
         
         // COMPROBADOR
         
@@ -104,6 +98,7 @@ int main(int argc, char* argv[]) {
             shm_unlink(SHM_NAME);
             exit(EXIT_FAILURE);
         }
+
         // Hace un mapeo de la memoria compartida
         shm_block = mmap(NULL, sizeof(MemoriaCompartida), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
         if(shm_block == MAP_FAILED) {
@@ -123,14 +118,7 @@ int main(int argc, char* argv[]) {
         close(fd_shm);
 
         // Abrir la cola
-        queue = mq_open(MQ_NAME, O_CREAT | O_RDONLY, S_IRUSR | S_IWUSR, &attributes);
-        if(queue == (mqd_t)-1) {
-            perror("mq_open");
-            munmap(shm_block, sizeof(MemoriaCompartida));
-            close(fd_shm);
-            shm_unlink(SHM_NAME);
-            exit(EXIT_FAILURE);
-        }
+        while((queue = mq_open(MQ_NAME, O_RDONLY)) == -1);
 
         printf("[%d] Checking blocks...\n", getpid());
         fflush(stdout);
@@ -142,6 +130,8 @@ int main(int argc, char* argv[]) {
                 munmap(shm_block, sizeof(MemoriaCompartida));
                 close(fd_shm);
                 shm_unlink(SHM_NAME);
+                mq_close(queue);
+                mq_unlink(MQ_NAME);
                 exit(EXIT_FAILURE);
             }
 
@@ -169,6 +159,8 @@ int main(int argc, char* argv[]) {
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
         shm_unlink(SHM_NAME);
+        mq_close(queue);
+        mq_unlink(MQ_NAME);
     }
 
     printf("[%d] Finishing\n", getpid());

@@ -75,7 +75,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
 
         if (mq_send(mq,(char*)&mensaje, sizeof(Block), 0) == -1) {
             perror("mq_send");
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
         }
 
         objetivo_ronda = solucion;
@@ -84,7 +84,7 @@ int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
     }
     printf("[%d] Finishing\n", getpid());
     fflush(stdout);
-    exit(EXIT_SUCCESS);
+    return EXIT_SUCCESS;
 }
 
 void *busqueda(void *arg){
@@ -108,12 +108,12 @@ int main(int argc, char* argv[]) {
         lag = atoi(argv[2]);
     } else {
         printf("Error en los argumentos del ejecutable minero\n");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     if(rondas<=0 || lag<0) {
         printf("Error en los argumentos del ejecutable minero\n");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     // MINERO
@@ -129,17 +129,21 @@ int main(int argc, char* argv[]) {
     mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR, &attributes);
     if (mq == (mqd_t)-1) {
         perror("mq_open");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
     //realiza el proceso de resolver el pow
 
-    proceso_minero(rondas, MAX_THREADS, obj_inicial, mq, lag);
+    if(proceso_minero(rondas, MAX_THREADS, obj_inicial, mq, lag) == EXIT_FAILURE) {
+        mq_close(mq);
+        mq_unlink(MQ_NAME);
+        exit(EXIT_FAILURE);
+    }
 
     //Finalizamos y liberamos recursos
     mq_close(mq);
     mq_unlink(MQ_NAME);
 
-    return EXIT_SUCCESS;
+    exit(EXIT_SUCCESS);
 }
 
 

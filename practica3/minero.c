@@ -1,3 +1,12 @@
+/**
+ * @file minero.c
+ * @author Sara Serrano Marazuela
+ * @author Xiomara Caballero Cuya
+ * @brief Module minero
+ * @version 1.0
+ * @date 2025-04-15
+ *
+ */
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -12,7 +21,10 @@
 #include "monitor.h"
 #include <mqueue.h>
 
-
+/**
+ * @struct Datos
+ * @brief Estructura que representa los datos necesarios para la búsqueda
+ */
 typedef struct {
     long int inicio_rango;
     long int final_rango;
@@ -20,6 +32,15 @@ typedef struct {
     long int objetivo;
 } Datos;
 
+/**
+ * @brief El proceso minero que ejecuta los bloques
+ *
+ * @param rondas el número de rondas a realizar
+ * @param hilos el número de hilos a utilizar
+ * @param objetivo el objetivo a buscar
+ * @param mq la cola de mensajes para enviar los bloques
+ * @param lag el retardo entre rondas
+ */
 int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
     int i, j, error;
     pthread_t h[hilos];

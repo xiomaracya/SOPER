@@ -3,8 +3,8 @@
  * @author Sara Serrano Marazuela
  * @author Xiomara Caballero Cuya
  * @brief Module minero
- * @version 2.0
- * @date 2024-02-01
+ * @version 1.0
+ * @date 2025-02-01
  *
  */
 #include <stdio.h>
@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <mqueue.h>
 
 /**
  * Macro del tamaño de la cola de mensane
@@ -24,7 +25,7 @@
 /**
  * Macro del numero de hilos utilizamos en minero
  */
-#define MAX_THREADS 1
+#define MAX_THREADS 7
 
 /**
  * @brief Minates a function with a number of thread and rounds
@@ -36,7 +37,7 @@
  * @param fd_lectura file descriptor that allows to read in the second pipe
  * @return status of the operation EXIT_FAILURE or EXIT_SUCCESS
  */
-int proceso_minero(int rondas, int hilos, long int objetivo, int fd_escritura, int fd_lectura);
+int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag);
 
 /**
  * @brief search in the function pow_hash a target in a ragne of number

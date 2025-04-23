@@ -1,8 +1,16 @@
+/**
+ * @file monitor.c
+ * @author Sara Serrano Marazuela
+ * @author Xiomara Caballero Cuya
+ * @brief Monitor
+ * @version 1.0
+ * @date 2025-04-15
+ *
+ */
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -13,6 +21,12 @@
 #include "monitor.h"
 #include "minero.h"
 
+/**
+ * @brief The main that is going to execute monitor and comprobador
+ *
+ * @param argc número de argumentos
+ * @param argv argumentos
+ */
 int main(int argc, char* argv[]) {
     int fd_shm;
     int lag;
@@ -22,11 +36,11 @@ int main(int argc, char* argv[]) {
     if(argc == 2) {
         lag = atoi(argv[1]);
     } else {
-        printf("Error en los argumentos del ejecutable minero\n");
+        printf("Error en los argumentos del ejecutable monitor\n");
         return EXIT_FAILURE;
     }
     if(lag < 0){
-        printf("Error en los argumentos del ejecutable minero\n");
+        printf("Error en los argumentos del ejecutable monitor\n");
         return EXIT_FAILURE;
     }
 

@@ -3,8 +3,8 @@
  * @author Sara Serrano Marazuela
  * @author Xiomara Caballero Cuya
  * @brief Module monitor
- * @version 2.0
- * @date 2024-02-01
+ * @version 1.0
+ * @date 2025-02-01
  *
  */
 #include <stdio.h>
@@ -18,25 +18,32 @@
 #include <sys/stat.h>
 
 
-#define MAX_BLOCKS 6
-#define MAX_PID 30
-#define SHM_NAME "/minero_shm"
-#define MQ_NAME "/mq"
+#define MAX_BLOCKS 6 /*!< Número máximo de bloques en el buffer */
+#define MAX_PID 30 /*< Número máximo de procesos */
+#define SHM_NAME "/minero_shm" /*< Nombre del segmento de memoria compartida */
 
+/**
+ * @struct Block
+ * @brief Estructura que representa un bloque de datos
+ */
 typedef struct {
-    long int objetivo;
-    long int solucion;
-    bool flag;
-    bool fin;
+    long int objetivo; /*< Objetivo introducido */
+    long int solucion; /*< Solución encontrada */
+    bool flag; /*< Bandera que indica si se finaliza */
+    bool fin; /*< Estado de la solución */
 } Block;
 
+/**
+ * @struct Block
+ * @brief Estructura que representa la memoria compartida
+ */
 typedef struct {
-    Block buffer[MAX_BLOCKS];
-    int in;
-    int out;
-    sem_t sem_empty;
-    sem_t sem_full;
-    sem_t sem_mutex;
+    Block buffer[MAX_BLOCKS]; /*< Buffer compartido */
+    int in; /*< Índice para escribir */
+    int out; /*< Índice para leer */
+    sem_t sem_empty; /*< Semáforo para contar los espacios vacíos en el buffer */
+    sem_t sem_full; /*< Semáforo para contar los espacios llenos en el buffer */
+    sem_t sem_mutex; /*< Semáforo para saber si se puede escribir en el buffer */
 } MemoriaCompartida;
 
 /**

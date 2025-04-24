@@ -108,6 +108,11 @@ int proceso_minero(int rondas, int hilos, long int objetivo, mqd_t mq, int lag){
     return EXIT_SUCCESS;
 }
 
+/**
+ * @brief The function that is going to solve pow_hash
+ * 
+ * @param arg pointer to the struct Datos
+ */
 void *busqueda(void *arg){
     Datos *args = (Datos*)arg;
     long int i;
@@ -121,6 +126,12 @@ void *busqueda(void *arg){
     return NULL;   
 }
 
+/**
+ * @brief The main that is going to execute miner
+ *
+ * @param argc número de argumentos
+ * @param argv argumentos
+ */
 int main(int argc, char* argv[]) {
     int rondas = 0, lag = 0;
     int obj_inicial = 0;

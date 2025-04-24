@@ -90,6 +90,8 @@ int main(int argc, char* argv[]) {
                 fflush(stdout);
             }
 
+            // Comprueba cada 100 ms
+            usleep(100);
             // Se realiza la espera de lag milisegundos
             usleep(lag*1000);
         }

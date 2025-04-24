@@ -90,8 +90,6 @@ int main(int argc, char* argv[]) {
                 fflush(stdout);
             }
 
-            // Comprueba cada 100 ms
-            usleep(100);
             // Se realiza la espera de lag milisegundos
             usleep(lag*1000);
         }
@@ -134,7 +132,10 @@ int main(int argc, char* argv[]) {
         close(fd_shm);
 
         // Abrir la cola
-        while((queue = mq_open(MQ_NAME, O_RDONLY)) == -1);
+        while((queue = mq_open(MQ_NAME, O_RDONLY)) == -1) {
+            // Comprueba cada 100 ms
+            usleep(100);
+        }
 
         printf("[%d] Checking blocks...\n", getpid());
         fflush(stdout);

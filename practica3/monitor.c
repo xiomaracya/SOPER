@@ -95,6 +95,10 @@ int main(int argc, char* argv[]) {
         }
 
         // Cuando recibe el bloque de finalización, libera los recursos y termina
+        sem_destroy(&shm_block->sem_empty);
+        sem_destroy(&shm_block->sem_full);
+        sem_destroy(&shm_block->sem_mutex);
+
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
         shm_unlink(SHM_NAME);
@@ -175,7 +179,7 @@ int main(int argc, char* argv[]) {
 
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
-        shm_unlink(SHM_NAME);
+
         mq_close(queue);
         mq_unlink(MQ_NAME);
     }

@@ -173,7 +173,6 @@ int main(int argc, char* argv[]) {
 
     //Finalizamos y liberamos recursos
     mq_close(mq);
-    mq_unlink(MQ_NAME);
 
     exit(EXIT_SUCCESS);
 }

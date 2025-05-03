@@ -21,9 +21,10 @@
 #define _MONITOR_H
 
 
-#define MAX_BLOCKS 6 /*!< Número máximo de bloques en el buffer */
+#define MAX_BLOCKS 5 /*!< Número máximo de bloques en el buffer */
 #define MAX_PID 30 /*< Número máximo de procesos */
 #define SHM_NAME "/minero_shm" /*< Nombre del segmento de memoria compartida */
+#define LAG 100 /*< Lag para que el programa espere*/
 
 /**
  * Macro del número máximo de procesos mineros

@@ -23,17 +23,16 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-static volatile sig_atomic_t final = false;
+static volatile sig_atomic_t final = 0;
 
 /**
  * @brief The handler of the signal SIGINT
  * 
  * @param sig the signal
  */
-void handle_signal(int sig) {
-    if (sig == SIGINT) {
-        final = true;
-    }
+void handle_sigint(int sig) {
+    (void)sig;
+    final = 1;
 }
 
 /**
@@ -45,10 +44,18 @@ int main() {
     bool fin = false;
     MemoriaCompartida *shm_block = NULL;
 
-    fd_shm = shm_open(SHM_NAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-    if (fd_shm == -1) {
-        perror("shm_open");
+    struct sigaction act_int;
+    act_int.sa_handler = handle_sigint;
+    sigemptyset(&(act_int.sa_mask));
+    act_int.sa_flags = 0;
+
+    if(sigaction(SIGINT, &act_int, NULL) < 0) {
+        perror("sigaction");
         exit(EXIT_FAILURE);
+    }
+
+    while((fd_shm = shm_open(SHM_NAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR))==-1) {
+        usleep(1000);
     }
 
     // Se establece el tamaño del segmento de memoria compartida
@@ -81,8 +88,6 @@ int main() {
         /// MONITOR
         Block mensaje;
 
-        signal(SIGINT, handle_signal);
-
         while(!fin && !final) {
             // Se extrae un bloque
             sem_wait(&shm_block->sem_full);
@@ -96,7 +101,7 @@ int main() {
 
             fin = mensaje.fin;
 
-            if (final) break;
+            if (fin) break;
 
             // Se muestra el bloque por pantalla
 
@@ -110,8 +115,10 @@ int main() {
             }
             printf("Votes: %d/%d \n", mensaje.num_votos_positivos, mensaje.num_votos_totales);
             printf("Wallets: ");
-            for (int i = 0; i<mensaje.num_carteras; i++){
-                printf(" %08d:%08d   ", mensaje.pid_carteras[i], mensaje.monedas[i]);
+            for (int i = 0; i<MAX_MINEROS; i++){
+                if(mensaje.pid_carteras[i] != 0) {
+                    printf(" %d:%d   ", mensaje.pid_carteras[i], mensaje.monedas[i]);
+                }
             }
             printf("\n");
             fflush(stdout);
@@ -134,10 +141,6 @@ int main() {
         mqd_t queue;
         Block mensaje;
 
-        signal(SIGINT, handle_signal);
-        
-        close(fd_shm);
-
         // Abrir la cola
         while((queue = mq_open(MQ_NAME, O_RDONLY)) == -1) {
             // Comprueba cada 100 ms
@@ -145,6 +148,8 @@ int main() {
         }
 
         while (fin == false && final == false) {
+            printf("Inicio de comprobador\n");
+            fflush(stdout);
             // Recibe un bloque a través de la cola de mensajes
             if(mq_receive(queue, (char*)&mensaje, sizeof(Block), NULL) == -1) {
                 perror("mq_receive");
@@ -173,6 +178,8 @@ int main() {
 
             sem_post(&shm_block->sem_mutex);
             sem_post(&shm_block->sem_full);
+
+            if(fin) break;
             
             usleep(LAG*1000);
         }
@@ -197,16 +204,16 @@ int main() {
             fprintf(stderr, "Monitor no terminó correctamente\n");
         }
 
+        sem_destroy(&shm_block->sem_empty);
+        sem_destroy(&shm_block->sem_full);
+        sem_destroy(&shm_block->sem_mutex);
+
 
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
 
         mq_close(queue);
         mq_unlink(MQ_NAME);
-
-        sem_destroy(&shm_block->sem_empty);
-        sem_destroy(&shm_block->sem_full);
-        sem_destroy(&shm_block->sem_mutex);
 
         shm_unlink(SHM_NAME);
         printf("[%d] Finishing\n", getpid());

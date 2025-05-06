@@ -91,6 +91,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
 
     printf("Hay un total de %d hilos\n", hilos);
 
+    fin_votacion = 0;
     /* SE UTILIZAN MÚLTIPLES HILOS EN PARALELO */
     for (j=0; j<hilos; j++){
         datos[j].inicio_rango = inicio;
@@ -267,7 +268,14 @@ void *busqueda(void *arg){
     Datos *args = (Datos*)arg;
     long int i;
 
+    printf("Ha comenzado a buscar ");
+    printf(" final rango %ld ", args->final_rango);
+    printf(" solucion  %ld ", *args->solucion);
+    printf ("fin votacion %d ", fin_votacion);
     for (i = args->inicio_rango; i<=args->final_rango && *args->solucion == -1 && fin_votacion == 0; i++){
+        if(i == args->inicio_rango){
+            printf(" ha entrado en el for");
+        }
         if(args->objetivo==pow_hash(i)){
             *args->solucion = i;
             return NULL;

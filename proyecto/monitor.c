@@ -142,7 +142,7 @@ int main() {
         Block mensaje;
 
         // Abrir la cola
-        while((queue = mq_open(MQ_NAME, O_RDONLY)) == -1) {
+        while((queue = mq_open(MQ_NAME,O_CREAT | O_RDONLY)) == -1) {
             // Comprueba cada 100 ms
             usleep(LAG);
         }

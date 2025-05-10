@@ -130,8 +130,6 @@ int main() {
         // Cuando recibe el bloque de finalización, libera los recursos y termina
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
-        unlink(SHM_NAME);
-        printf("FIN");
         fflush(stdout);
         exit(EXIT_SUCCESS);
 

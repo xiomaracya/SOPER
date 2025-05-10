@@ -182,7 +182,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
 
         /* ESPERAR HASTA QUE TODOS LOS MINEROS HAYAN VOTADO */
         int intentos = 0;
-        while (1) {
+        while (intentos<1000) {
             sem_wait(&shm_sistema->sem_mutex_bloque);
             if (shm_sistema->bloque_actual.num_votos_totales >= shm_sistema->bloque_actual.num_carteras) {
                 sem_post(&shm_sistema->sem_mutex_bloque);
@@ -210,12 +210,12 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
+        intentos = 0;
         while (mq_send(mq, (char*)&shm_sistema->bloque_actual, sizeof(Block), 0) == -1) {
-            if (errno == EINTR) {
-                usleep(100);
-                printf("bucle mq_send_ganador: %s\n", strerror(errno));
-                fflush(stdout);
-                continue; // reintenta si fue interrumpido
+            if (errno == EINTR && intentos < 1000) {
+                intentos++;
+                usleep(1000); // 1ms
+                continue;
             }
             perror("mq_send_ganador");
             return EXIT_FAILURE;
@@ -244,6 +244,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
             bloque_actual.pid_carteras[i] = 0;
             bloque_actual.monedas[i] = 0;
         }
+
         shm_sistema->bloque_actual = bloque_actual;
 
         sem_post(&shm_sistema->sem_mutex_bloque);
@@ -545,9 +546,6 @@ int main(int argc, char* argv[]) {
         proceso_minero(n_threads, shm_sistema, mq);
     }
 
-    printf("El proceso minero %d ha terminado\n", getpid());
-    fflush(stdout);
-
     /* FINALIZA EL PROCESO Y LIBERA RECURSOS */
     sem_wait(&shm_sistema->sem_mutex);
     int total_pids = 0;
@@ -563,13 +561,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    printf("El total de mineros es %d\n", total_pids);
-    fflush(stdout);
-
     sem_post(&shm_sistema->sem_mutex);
 
     if(total_pids == 1) {
-        printf("Soy el último minero, voy a liberar los recursos\n");
         Block mensaje;
         memset(&mensaje, 0, sizeof(Block));
         mensaje.flag = false;
@@ -584,13 +578,11 @@ int main(int argc, char* argv[]) {
         munmap(shm_sistema, sizeof(Sistema));
         close(fd_shm);
         shm_unlink(SHM_SISTEMA);
-        printf("Fin del minero %d\n", getpid());
         exit(EXIT_SUCCESS);
     }
 
     sem_wait(&shm_sistema->sem_full);
     sem_post(&shm_sistema->sem_empty);
-    printf("Fin del minero %d\n", getpid());
     exit(EXIT_SUCCESS);
 }
 

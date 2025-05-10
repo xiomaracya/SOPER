@@ -28,15 +28,11 @@ static volatile sig_atomic_t fin_votacion = 0;
 
 void handle_sigint(int sig) {
     (void)sig;
-    printf("El proceso %d ha recibido la señal SIGINT\n", getpid());
-    fflush(stdout);
     finalizar = 1;
 }
 
 void handle_sigalarm(int sig) {
     (void)sig;
-    printf("El proceso %d ha recibido la señal SIGALARM\n", getpid());
-    fflush(stdout);
     finalizar = 1;
 }
 
@@ -48,6 +44,7 @@ void handle_sigusr2(int sig) {
     (void)sig;
     fin_votacion = 1;
 }
+
 
 /**
  * @struct Datos
@@ -79,19 +76,12 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
     long int inicio;
     long int objetivo_ronda;
 
-    printf("El proceso %d ha comenzado a minar\n", getpid());
-    fflush(stdout);
-
     sem_wait(&shm_sistema->sem_mutex_bloque);
     objetivo_ronda = shm_sistema->bloque_actual.objetivo;
     sem_post(&shm_sistema->sem_mutex_bloque);
 
-    printf("El objetivo de la ronda es %ld\n", objetivo_ronda);
-
     solucion = -1;
     inicio=0;
-
-    printf("Hay un total de %d hilos\n", hilos);
 
     fin_votacion = 0;
     /* SE UTILIZAN MÚLTIPLES HILOS EN PARALELO */
@@ -125,14 +115,6 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
     if(sem_trywait(&shm_sistema->sem_ganador) == -1) {
         /* PROCESO PERDEDOR */
 
-        printf("El proceso %d ha perdido\n", getpid());
-        fflush(stdout);
-
-        
-
-        printf("El proceso %d ha recibido la señal de ganador\n", getpid());
-        fflush(stdout);
-
         /* EL PROCESO PERDEDOR VOTA*/
         sem_wait(&shm_sistema->sem_mutex_bloque);
         sem_wait(&shm_sistema->sem_mutex);
@@ -148,28 +130,18 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
             }
         }
         shm_sistema->bloque_actual.num_votos_totales++;
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            printf("%d ", shm_sistema->votos[i]);
-            fflush(stdout);
-        }
         sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
     } else {
         /* PROCESO GANADOR */
-        printf("El proceso %d ha ganado\n", getpid());
-        fflush(stdout);
 
         /* SE ENVÍA LA SEÑAL USR2 */
         sem_wait(&shm_sistema->sem_mutex_bloque);
         sem_wait(&shm_sistema->sem_mutex);
-        printf("Hay %d carteras\n", shm_sistema->bloque_actual.num_carteras);
-        fflush(stdout);
 
-        for (int i = 0; i < shm_sistema->bloque_actual.num_carteras; i++) {
-            if(shm_sistema->bloque_actual.pid_carteras[i] != getpid()) {
-                printf("Enviando señal a %d\n", shm_sistema->bloque_actual.pid_carteras[i]);
-                fflush(stdout);
+        for (int i = 0; i < MAX_MINEROS; i++) {
+            if(shm_sistema->bloque_actual.pid_carteras != 0 && shm_sistema->bloque_actual.pid_carteras[i] != getpid()) {
                 kill(shm_sistema->bloque_actual.pid_carteras[i], SIGUSR2);
             }
         }
@@ -177,16 +149,9 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         shm_sistema->bloque_actual.id = shm_sistema->ultimo_bloque.id + 1;
         shm_sistema->bloque_actual.objetivo = objetivo_ronda;
 
-        printf("La solucion es %ld\n", solucion);
         shm_sistema->bloque_actual.solucion = solucion;
         shm_sistema->bloque_actual.ganador = getpid();
-        for (int i = 0; i < shm_sistema->bloque_actual.num_carteras; i++) {
-            for (int j = 0; j < MAX_MINEROS; j++) {
-                if(shm_sistema->pid[j] == shm_sistema->bloque_actual.pid_carteras[i]) {
-                    shm_sistema->bloque_actual.monedas[i] = shm_sistema->monedas[j];
-                    break;
-                }
-            }
+        for (int i = 0; i < MAX_MINEROS; i++) {
             shm_sistema->bloque_actual.monedas[i] = shm_sistema->monedas[i];
         }
         shm_sistema->bloque_actual.flag = false;
@@ -212,7 +177,6 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
                 break;
             }
         }
-        printf("Hay un total de %d carteras\n", shm_sistema->bloque_actual.num_carteras);
         sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
@@ -230,32 +194,36 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         }
 
         sem_wait(&shm_sistema->sem_mutex_bloque);
-        printf("El número de votos totales es %d\n", shm_sistema->bloque_actual.num_votos_totales);
+        sem_wait(&shm_sistema->sem_mutex);
 
         /* COMPROBAR SI SE APRUEBA EL BLOQUE */
         if (shm_sistema->bloque_actual.num_votos_positivos > shm_sistema->bloque_actual.num_carteras / 2) {
             for (int i = 0; i < MAX_MINEROS; i++) {
                 if (shm_sistema->bloque_actual.pid_carteras[i] == getpid()) {
                     shm_sistema->bloque_actual.monedas[i]++;
+                    shm_sistema->monedas[i]++;
                     break;
                 }
             }
         }
 
+        sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
-        if (mq_send(mq,(char*)&shm_sistema->bloque_actual, sizeof(Block), 0) == -1) {
+        while (mq_send(mq, (char*)&shm_sistema->bloque_actual, sizeof(Block), 0) == -1) {
+            if (errno == EINTR) {
+                usleep(100);
+                printf("bucle mq_send_ganador: %s\n", strerror(errno));
+                fflush(stdout);
+                continue; // reintenta si fue interrumpido
+            }
             perror("mq_send_ganador");
-
             return EXIT_FAILURE;
         }
 
+
         sem_wait(&shm_sistema->sem_mutex_bloque);
         sem_wait(&shm_sistema->sem_mutex);
-
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            shm_sistema->monedas[i] = shm_sistema->bloque_actual.monedas[i];
-        }
 
         shm_sistema->ultimo_bloque = shm_sistema->bloque_actual;
         Block bloque_actual;
@@ -280,23 +248,16 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
 
         sem_post(&shm_sistema->sem_mutex_bloque);
 
-        printf("\n");
         for (int i = 0; i < MAX_MINEROS; i++) {
             pid_t pid = shm_sistema->pid[i];
             if (pid != 0) {
                 if (kill(pid, SIGUSR1) == -1) {
                     perror("kill SIGUSR1");
-                } else {
-                    printf("Enviado SIGUSR1 a %d\n", pid);
                 }
-                fflush(stdout);
             }
         }
         sem_post(&shm_sistema->sem_mutex);
 
-
-        printf("\n");
-        fflush(stdout);
         sem_post(&shm_sistema->sem_ganador);
         
     }
@@ -312,16 +273,7 @@ void *busqueda(void *arg){
     Datos *args = (Datos*)arg;
     long int i;
 
-    printf("Ha comenzado a buscar ");
-    printf(" final rango %ld ", args->final_rango);
-    printf(" solucion  %ld ", *args->solucion);
-    printf ("fin votacion %d ", fin_votacion);
-    fflush(stdout);
     for (i = args->inicio_rango; i<=args->final_rango && *args->solucion == -1 && fin_votacion == 0; i++){
-        if(i == args->inicio_rango){
-            printf(" ha entrado en el for");
-            fflush(stdout);
-        }
         if(args->objetivo==pow_hash(i)){
             *args->solucion = i;
             return NULL;
@@ -348,6 +300,7 @@ int main(int argc, char* argv[]) {
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGUSR1);
+    sigaddset(&mask, SIGINT);
     pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     /* CAPTURA DE SIGINT */
@@ -413,16 +366,10 @@ int main(int argc, char* argv[]) {
     if(fd_shm == -1) {
         /* SE AÑADE UN MINERO AL SISTEMA */
 
-        printf("El proceso %d %d %d está esperando a que se cree el sistema\n", getpid(), n_threads, n_seconds);
-        fflush(stdout);
-
         /* SE ABRE UN SEGMENTO DE MEMORIA COMPARTIDA */
         while((fd_shm = shm_open(SHM_SISTEMA, O_RDWR, 0)) == -1) {
             usleep(1000);
         }
-
-        printf("El proceso %d %d %d ya ha abierto el sistema\n", getpid(), n_threads, n_seconds);
-        fflush(stdout);
 
         shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
         if(shm_sistema == MAP_FAILED) {
@@ -475,15 +422,11 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        printf("El proceso %d %d %d ha añadido el pid al sistema\n", getpid(), n_threads, n_seconds);
-
         sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_full);
 
     } else {
         /* SE CREA SISTEMA POR PRIMERA VEZ */
-        printf("Se crea el sistema por primera vez\n");
-        fflush(stdout);
 
         /* SE ESTABLECE EL TAMAÑO DEL SEGMENTO DE MEMORIA COMPARTIDA */
         if(ftruncate(fd_shm, sizeof(Sistema)) == -1) {
@@ -560,8 +503,6 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        printf("El proceso %d %d %d ha añadido el pid al sistema\n", getpid(), n_threads, n_seconds);
-
         sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_full);
 
@@ -574,8 +515,6 @@ int main(int argc, char* argv[]) {
                     perror("kill");
                     exit(EXIT_FAILURE);
                 }
-                printf("El proceso %d %d %d ha enviado la señal SIGUSR1 a %d\n", getpid(),n_threads, n_seconds, shm_sistema->pid[i]);
-                fflush(stdout);
             }
         }
         sem_post(&shm_sistema->sem_mutex);
@@ -585,28 +524,32 @@ int main(int argc, char* argv[]) {
     /* REALIZA EL PROCESO PARA RESOLVER EL POW */
 
     while(!finalizar) {
-        printf("El proceso %d está esperando a SIGUSR1 %d %d\n", getpid(), n_threads, n_seconds);
-        fflush(stdout);
         if (sigwait(&mask, &sig) != 0) {
             perror("sigwait"); 
             return EXIT_FAILURE;
         }
-        printf("El proceso %d ha recibido a SIGUSR1 %d %d\n", getpid(), n_threads, n_seconds);
-        fflush(stdout);
 
         sem_wait(&shm_sistema->sem_mutex_bloque);
+        sem_wait(&shm_sistema->sem_mutex);
         shm_sistema->bloque_actual.num_carteras++;
-        shm_sistema->bloque_actual.pid_carteras[shm_sistema->bloque_actual.num_carteras-1] = getpid();
+        for (int i = 0; i < MAX_MINEROS; i++) {
+            if(shm_sistema->pid[i] == getpid()) {
+                shm_sistema->bloque_actual.pid_carteras[i] = getpid();
+                shm_sistema->bloque_actual.monedas[i] = shm_sistema->monedas[i];
+                break;
+            }
+        }
+        sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
         proceso_minero(n_threads, shm_sistema, mq);
     }
 
-    /* FINALIZA EL PROCESO Y LIBERA RECURSOS */
-    sem_wait(&shm_sistema->sem_mutex);
-    printf("El proceso %d ha finalizado\n", getpid());
+    printf("El proceso minero %d ha terminado\n", getpid());
     fflush(stdout);
 
+    /* FINALIZA EL PROCESO Y LIBERA RECURSOS */
+    sem_wait(&shm_sistema->sem_mutex);
     int total_pids = 0;
 
     for (int i = 0; i < MAX_MINEROS; i++) {
@@ -617,15 +560,16 @@ int main(int argc, char* argv[]) {
             shm_sistema->pid[i] = 0;
             shm_sistema->monedas[i] = 0;
             shm_sistema->votos[i] = 0;
-            break;
         }
     }
 
-    sem_wait(&shm_sistema->sem_full);
-    sem_post(&shm_sistema->sem_empty);
+    printf("El total de mineros es %d\n", total_pids);
+    fflush(stdout);
+
     sem_post(&shm_sistema->sem_mutex);
 
     if(total_pids == 1) {
+        printf("Soy el último minero, voy a liberar los recursos\n");
         Block mensaje;
         memset(&mensaje, 0, sizeof(Block));
         mensaje.flag = false;
@@ -640,9 +584,13 @@ int main(int argc, char* argv[]) {
         munmap(shm_sistema, sizeof(Sistema));
         close(fd_shm);
         shm_unlink(SHM_SISTEMA);
-        exit(EXIT_FAILURE);
+        printf("Fin del minero %d\n", getpid());
+        exit(EXIT_SUCCESS);
     }
 
+    sem_wait(&shm_sistema->sem_full);
+    sem_post(&shm_sistema->sem_empty);
+    printf("Fin del minero %d\n", getpid());
     exit(EXIT_SUCCESS);
 }
 

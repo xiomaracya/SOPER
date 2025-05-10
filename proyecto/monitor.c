@@ -120,7 +120,7 @@ int main() {
                     printf(" %d:%d   ", mensaje.pid_carteras[i], mensaje.monedas[i]);
                 }
             }
-            printf("\n");
+            printf("\n\n");
             fflush(stdout);
 
             // Se realiza la espera de lag milisegundos
@@ -130,6 +130,9 @@ int main() {
         // Cuando recibe el bloque de finalización, libera los recursos y termina
         munmap(shm_block, sizeof(MemoriaCompartida));
         close(fd_shm);
+        unlink(SHM_NAME);
+        printf("FIN");
+        fflush(stdout);
         exit(EXIT_SUCCESS);
 
     } else if (monitor_pid < 0) {
@@ -148,8 +151,6 @@ int main() {
         }
 
         while (fin == false && final == false) {
-            printf("Inicio de comprobador\n");
-            fflush(stdout);
             // Recibe un bloque a través de la cola de mensajes
             if(mq_receive(queue, (char*)&mensaje, sizeof(Block), NULL) == -1) {
                 perror("mq_receive");

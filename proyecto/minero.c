@@ -194,10 +194,12 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         shm_sistema->bloque_actual.num_votos_totales = 0;
         shm_sistema-> bloque_actual.num_votos_positivos = 0;
 
+        sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
         /* VOTA EL MINERO GANADOR */
         sem_wait(&shm_sistema->sem_mutex_bloque);
+        sem_wait(&shm_sistema->sem_mutex);
         shm_sistema->bloque_actual.num_votos_totales++;
         for (int i = 0; i < MAX_MINEROS; i++) {
             if(shm_sistema->pid[i] == getpid()) {
@@ -211,6 +213,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
             }
         }
         printf("Hay un total de %d carteras\n", shm_sistema->bloque_actual.num_carteras);
+        sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_mutex_bloque);
 
         /* ESPERAR HASTA QUE TODOS LOS MINEROS HAYAN VOTADO */
@@ -222,7 +225,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
                 break;
             }
             sem_post(&shm_sistema->sem_mutex_bloque);
-            usleep(1000);
+            usleep(100);
             intentos++;
         }
 
@@ -248,6 +251,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         }
 
         sem_wait(&shm_sistema->sem_mutex_bloque);
+        sem_wait(&shm_sistema->sem_mutex);
 
         for (int i = 0; i < MAX_MINEROS; i++) {
             shm_sistema->monedas[i] = shm_sistema->bloque_actual.monedas[i];
@@ -288,11 +292,11 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
                 fflush(stdout);
             }
         }
+        sem_post(&shm_sistema->sem_mutex);
 
 
         printf("\n");
         fflush(stdout);
-        sem_post(&shm_sistema->sem_mutex);
         sem_post(&shm_sistema->sem_ganador);
         
     }

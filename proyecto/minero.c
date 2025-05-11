@@ -29,6 +29,26 @@ static volatile sig_atomic_t fin_votacion = 0;
 void handle_sigint(int sig) {
     (void)sig;
     finalizar = 1;
+
+    Sistema *shm_sistema;
+    int fd_shm = shm_open(SHM_SISTEMA, O_RDWR, 0);
+    if (fd_shm == -1) return;
+
+    shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
+    if (shm_sistema == MAP_FAILED) {
+        close(fd_shm);
+        return;
+    }
+
+    for (int i = 0; i < MAX_MINEROS; i++) {
+        pid_t pid = shm_sistema->pid[i];
+        if (pid != 0 && pid != getpid()) {
+            kill(pid, SIGINT);  // Enviamos SIGINT a los demás
+        }
+    }
+
+    munmap(shm_sistema, sizeof(Sistema));
+    close(fd_shm);
 }
 
 void handle_sigalarm(int sig) {
@@ -301,7 +321,6 @@ int main(int argc, char* argv[]) {
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGUSR1);
-    sigaddset(&mask, SIGINT);
     pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     /* CAPTURA DE SIGINT */
@@ -526,9 +545,11 @@ int main(int argc, char* argv[]) {
 
     while(!finalizar) {
         if (sigwait(&mask, &sig) != 0) {
-            perror("sigwait"); 
+            perror("sigwait");
             return EXIT_FAILURE;
         }
+
+        if (finalizar) break;
 
         sem_wait(&shm_sistema->sem_mutex_bloque);
         sem_wait(&shm_sistema->sem_mutex);

@@ -35,6 +35,7 @@ void handle_sigint(int sig) {
     final = 1;
 }
 
+
 /**
  * @brief The main that is going to execute monitor and comprobador
  *

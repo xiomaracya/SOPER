@@ -22,6 +22,7 @@
 #include <mqueue.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 static volatile sig_atomic_t finalizar = 0;
 static volatile sig_atomic_t fin_votacion = 0;
@@ -198,6 +199,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
 
         /* COMPROBAR SI SE APRUEBA EL BLOQUE */
         if (shm_sistema->bloque_actual.num_votos_positivos > shm_sistema->bloque_actual.num_carteras / 2) {
+            shm_sistema->bloque_actual.flag = true;
             for (int i = 0; i < MAX_MINEROS; i++) {
                 if (shm_sistema->bloque_actual.pid_carteras[i] == getpid()) {
                     shm_sistema->bloque_actual.monedas[i]++;
@@ -229,7 +231,7 @@ int proceso_minero(int hilos, Sistema *shm_sistema, mqd_t mq) {
         Block bloque_actual;
         memset(&bloque_actual, 0, sizeof(Block));
 
-        if (shm_sistema->bloque_actual.num_votos_positivos > shm_sistema->bloque_actual.num_carteras / 2) {
+        if (shm_sistema->bloque_actual.flag) {
             bloque_actual.objetivo = solucion;
         } else {
             bloque_actual.objetivo = shm_sistema->bloque_actual.objetivo;
@@ -298,292 +300,351 @@ int main(int argc, char* argv[]) {
     mqd_t mq;
     int sig;
 
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGUSR1);
-    sigaddset(&mask, SIGINT);
-    pthread_sigmask(SIG_BLOCK, &mask, NULL);
-
-    /* CAPTURA DE SIGINT */
-    act_int.sa_handler = handle_sigint;
-    sigemptyset(&(act_int.sa_mask));
-    act_int.sa_flags = 0;
-
-    if(sigaction(SIGINT, &act_int, NULL) < 0) {
-        perror("sigaction");
+    int pipefd[2];
+    if(pipe(pipefd) == -1) {
+        perror("pipe");
         exit(EXIT_FAILURE);
     }
 
-    /* CAPTURA DE SIGALARM */
-    act_alarm.sa_handler = handle_sigalarm;
-    sigemptyset(&(act_alarm.sa_mask));
-    act_alarm.sa_flags = 0;
-
-    if(sigaction(SIGALRM, &act_alarm, NULL) < 0) {
-        perror("sigaction");
+    pid_t registrador_pid = fork();
+    if(registrador_pid<0) {
+        perror("fork");
         exit(EXIT_FAILURE);
-    }
+    } else if (registrador_pid == 0) {
+        close(pipefd[1]);
 
-    /* CAPTURA DE SIGUSR1 */
-    act_usr1.sa_handler = handle_sigusr1;
-    sigemptyset(&(act_usr1.sa_mask));
-    act_usr1.sa_flags = 0;
-
-    if(sigaction(SIGUSR1, &act_usr1, NULL) < 0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-
-    /* CAPTURA DE SIGUSR2 */
-    act_usr2.sa_handler = handle_sigusr2;
-    sigemptyset(&(act_usr2.sa_mask));
-    act_usr2.sa_flags = 0;
-
-    if(sigaction(SIGUSR2, &act_usr2, NULL) < 0) {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-
-    /* COMPROBACIÓN DE ARGUMENTOS */
-
-    if(argc == 3) {
-        n_seconds = atoi(argv[1]);
-        n_threads = atoi(argv[2]);
-    } else {
-        printf("Error en los argumentos del ejecutable minero\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if(n_seconds<=0 || n_threads<0) {
-        printf("Error en los argumentos del ejecutable minero\n");
-        exit(EXIT_FAILURE);
-    }
-
-    /* ALARMA PARA QUE EL PROCESO TERMINE SI PASAN LOS SEGUNDOS ESPECIFICADOS */
-    alarm(n_seconds);
-
-    /* COMPRUEBA SI SE HA CREADO YA EL SISTEMA O NO */
-    fd_shm = shm_open(SHM_SISTEMA, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-    if(fd_shm == -1) {
-        /* SE AÑADE UN MINERO AL SISTEMA */
-
-        /* SE ABRE UN SEGMENTO DE MEMORIA COMPARTIDA */
-        while((fd_shm = shm_open(SHM_SISTEMA, O_RDWR, 0)) == -1) {
-            usleep(1000);
-        }
-
-        shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
-        if(shm_sistema == MAP_FAILED) {
-            perror("mmap");
-            close(fd_shm);
-            shm_unlink(SHM_SISTEMA);
+        char filename[64];
+        snprintf(filename, sizeof(filename), "registro_%d.txt", getpid());
+        FILE *f = fopen(filename, "a");
+        if(f == NULL) {
+            perror("fopen");
             exit(EXIT_FAILURE);
         }
 
-        /* SE CREA LA COLA DE MENSAJES */
-        while ((mq = mq_open(MQ_NAME, O_WRONLY)) == (mqd_t)-1) {
-            if (errno == ENOENT) {
-                usleep(1000); // espera a que el primero la cree
-            } else {
-                perror("mq_open_minero");
-                exit(EXIT_FAILURE);
+        Block b;
+        while (read(pipefd[0], &b, sizeof(Block)) > 0) {
+            printf("Registrador recibió bloque %ld\n", b.id);
+            fflush(stdout);
+            if(b.flag) {
+                fprintf(f, "ID: %04ld\n", b.id);
+                fprintf(f, "Ganador: %d\n", b.ganador);
+                fprintf(f, "Objetivo: %08ld\n", b.objetivo);
+                fprintf(f, "Solución: %08ld\n", b.solucion);
+                fprintf(f, "Votos: %d/%d\n", b.num_votos_positivos, b.num_votos_totales);
+                fprintf(f, "Wallets:");
+                for (int i = 0; i < MAX_MINEROS; i++) {
+                    if (b.pid_carteras[i] != 0) {
+                        fprintf(f, " %d:%d", b.pid_carteras[i], b.monedas[i]);
+                    }
+                }
+                fprintf(f, "\n--------------------------\n");
+                fflush(f);
             }
         }
 
-        /* ESPERA A QUE EL ÚLTIMO SEMÁFORO ESTÉ CREADO */
+        fclose(f);
+        close(pipefd[0]);
+        exit(EXIT_SUCCESS);
+    } else {
+        close(pipefd[0]);
 
-        while(sem_trywait(&shm_sistema->sem_mutex) == -1) {
-            if(errno == EAGAIN) {
-                usleep(100);
-            } else {
-                perror("sem_trywait");
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGUSR1);
+        sigaddset(&mask, SIGINT);
+        pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+        /* CAPTURA DE SIGINT */
+        act_int.sa_handler = handle_sigint;
+        sigemptyset(&(act_int.sa_mask));
+        act_int.sa_flags = 0;
+
+        if(sigaction(SIGINT, &act_int, NULL) < 0) {
+            perror("sigaction");
+            exit(EXIT_FAILURE);
+        }
+
+        /* CAPTURA DE SIGALARM */
+        act_alarm.sa_handler = handle_sigalarm;
+        sigemptyset(&(act_alarm.sa_mask));
+        act_alarm.sa_flags = 0;
+
+        if(sigaction(SIGALRM, &act_alarm, NULL) < 0) {
+            perror("sigaction");
+            exit(EXIT_FAILURE);
+        }
+
+        /* CAPTURA DE SIGUSR1 */
+        act_usr1.sa_handler = handle_sigusr1;
+        sigemptyset(&(act_usr1.sa_mask));
+        act_usr1.sa_flags = 0;
+
+        if(sigaction(SIGUSR1, &act_usr1, NULL) < 0) {
+            perror("sigaction");
+            exit(EXIT_FAILURE);
+        }
+
+        /* CAPTURA DE SIGUSR2 */
+        act_usr2.sa_handler = handle_sigusr2;
+        sigemptyset(&(act_usr2.sa_mask));
+        act_usr2.sa_flags = 0;
+
+        if(sigaction(SIGUSR2, &act_usr2, NULL) < 0) {
+            perror("sigaction");
+            exit(EXIT_FAILURE);
+        }
+
+        /* COMPROBACIÓN DE ARGUMENTOS */
+
+        if(argc == 3) {
+            n_seconds = atoi(argv[1]);
+            n_threads = atoi(argv[2]);
+        } else {
+            printf("Error en los argumentos del ejecutable minero\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if(n_seconds<=0 || n_threads<0) {
+            printf("Error en los argumentos del ejecutable minero\n");
+            exit(EXIT_FAILURE);
+        }
+
+        /* ALARMA PARA QUE EL PROCESO TERMINE SI PASAN LOS SEGUNDOS ESPECIFICADOS */
+        alarm(n_seconds);
+        /* COMPRUEBA SI SE HA CREADO YA EL SISTEMA O NO */
+        fd_shm = shm_open(SHM_SISTEMA, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+        if(fd_shm == -1) {
+            /* SE AÑADE UN MINERO AL SISTEMA */
+
+            /* SE ABRE UN SEGMENTO DE MEMORIA COMPARTIDA */
+            while((fd_shm = shm_open(SHM_SISTEMA, O_RDWR, 0)) == -1) {
+                usleep(1000);
+            }
+
+            shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
+            if(shm_sistema == MAP_FAILED) {
+                perror("mmap");
+                close(fd_shm);
+                shm_unlink(SHM_SISTEMA);
+                exit(EXIT_FAILURE);
+            }
+
+            /* SE CREA LA COLA DE MENSAJES */
+            while ((mq = mq_open(MQ_NAME, O_WRONLY)) == (mqd_t)-1) {
+                if (errno == ENOENT) {
+                    usleep(1000); // espera a que el primero la cree
+                } else {
+                    perror("mq_open_minero");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            /* ESPERA A QUE EL ÚLTIMO SEMÁFORO ESTÉ CREADO */
+
+            while(sem_trywait(&shm_sistema->sem_mutex) == -1) {
+                if(errno == EAGAIN) {
+                    usleep(100);
+                } else {
+                    perror("sem_trywait");
+                    munmap(shm_sistema, sizeof(Sistema));
+                    close(fd_shm);
+                    shm_unlink(SHM_SISTEMA);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            sem_post(&shm_sistema->sem_mutex);
+
+            if(sem_trywait(&shm_sistema->sem_empty) == -1) {
                 munmap(shm_sistema, sizeof(Sistema));
                 close(fd_shm);
                 shm_unlink(SHM_SISTEMA);
                 exit(EXIT_FAILURE);
             }
+
+            /* SE AÑADE EL NUEVO PID AL SISTEMA */
+            sem_wait(&shm_sistema->sem_empty);
+            sem_wait(&shm_sistema->sem_mutex);
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                if (shm_sistema->pid[i] == 0) {
+                    shm_sistema->pid[i] = getpid();
+                    shm_sistema->votos[i] = 0;
+                    break;
+                }
+            }
+
+            sem_post(&shm_sistema->sem_mutex);
+            sem_post(&shm_sistema->sem_full);
+
+        } else {
+            /* SE CREA SISTEMA POR PRIMERA VEZ */
+
+            /* SE ESTABLECE EL TAMAÑO DEL SEGMENTO DE MEMORIA COMPARTIDA */
+            if(ftruncate(fd_shm, sizeof(Sistema)) == -1) {
+                perror("ftruncate");
+                close(fd_shm);
+                shm_unlink(SHM_SISTEMA);
+                exit(EXIT_FAILURE);
+            }
+
+            /* HACE UN MAPEO DE LA MEMORIA COMPARTIDA */
+            shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
+            if(shm_sistema == MAP_FAILED) {
+                perror("mmap");
+                close(fd_shm);
+                shm_unlink(SHM_SISTEMA);
+                exit(EXIT_FAILURE);
+            }
+
+            Block bloque_actual;
+            memset(&bloque_actual, 0, sizeof(Block));
+            bloque_actual.objetivo = 0;
+            bloque_actual.solucion = 0;
+            bloque_actual.num_carteras = 0;
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                bloque_actual.pid_carteras[i] = 0;
+                bloque_actual.monedas[i] = 0;
+            }
+
+            Block ultimo_bloque;
+            memset(&ultimo_bloque, 0, sizeof(Block));
+            ultimo_bloque.id = -1;
+            ultimo_bloque.num_carteras = 0;
+
+            shm_sistema->bloque_actual = bloque_actual;
+            shm_sistema->ultimo_bloque = ultimo_bloque;
+
+            /* SE CREA LA COLA DE MENSAJES */
+            attributes.mq_flags = 0;
+            attributes.mq_maxmsg = MAX_MSG;
+            attributes.mq_msgsize = sizeof(Block);
+            attributes.mq_curmsgs = 0;
+
+            mq_unlink(MQ_NAME);
+            mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR, &attributes);
+            if (mq == (mqd_t)-1) {
+                perror("mq_open_crear");
+                exit(EXIT_FAILURE);
+            }
+
+            /* INICIALIZA LOS ARRAYS */
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                shm_sistema->pid[i] = 0;
+                shm_sistema->monedas[i] = 0;
+                shm_sistema->votos[i] = 0;
+            }
+
+            /* INICIALIZA LOS SEMÁFOROS */
+            shm_sistema->in = 0;
+            shm_sistema->out = 0;
+            sem_init(&shm_sistema->sem_empty, 1, MAX_MINEROS);
+            sem_init(&shm_sistema->sem_full, 1, 0);
+            sem_init(&shm_sistema->sem_mutex, 1, 1);
+            sem_init(&shm_sistema->sem_mutex_bloque, 1, 1);
+            sem_init(&shm_sistema->sem_ganador, 1, 1);
+
+            sem_wait(&shm_sistema->sem_empty);
+            sem_wait(&shm_sistema->sem_mutex);
+            /* SE AÑADE EL NUEVO PID AL SISTEMA */
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                if (shm_sistema->pid[i] == 0) {
+                    shm_sistema->pid[i] = getpid();
+                    shm_sistema->votos[i] = 0;
+                    break;
+                }
+            }
+
+            sem_post(&shm_sistema->sem_mutex);
+            sem_post(&shm_sistema->sem_full);
+
+            /* SE ENVÍA LA SEÑAL SIGUSR1 A LOS PROCESOS MINERO QUE YA ESTÁN ESPERANDO */
+
+            sem_wait(&shm_sistema->sem_mutex);
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                if(shm_sistema->pid[i] != 0) {
+                    if(kill(shm_sistema->pid[i], SIGUSR1)) {
+                        perror("kill");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            }
+            sem_post(&shm_sistema->sem_mutex);
+            
         }
+
+        /* REALIZA EL PROCESO PARA RESOLVER EL POW */
+
+        while(!finalizar) {
+            if (sigwait(&mask, &sig) != 0) {
+                perror("sigwait"); 
+                return EXIT_FAILURE;
+            }
+
+            sem_wait(&shm_sistema->sem_mutex_bloque);
+            sem_wait(&shm_sistema->sem_mutex);
+
+            if(shm_sistema->ultimo_bloque.id != -1) {
+                Block b;
+                memcpy(&b, &shm_sistema->ultimo_bloque, sizeof(Block));
+                if (write(pipefd[1], &b, sizeof(Block)) == -1) {
+                    perror("write pipe");
+                }
+            }
+            shm_sistema->bloque_actual.num_carteras++;
+            for (int i = 0; i < MAX_MINEROS; i++) {
+                if(shm_sistema->pid[i] == getpid()) {
+                    shm_sistema->bloque_actual.pid_carteras[i] = getpid();
+                    shm_sistema->bloque_actual.monedas[i] = shm_sistema->monedas[i];
+                    break;
+                }
+            }
+            sem_post(&shm_sistema->sem_mutex);
+            sem_post(&shm_sistema->sem_mutex_bloque);
+
+            proceso_minero(n_threads, shm_sistema, mq);
+        }
+        
+
+        /* FINALIZA EL PROCESO Y LIBERA RECURSOS */
+        close(pipefd[1]); // Cierra escritura en padre
+        waitpid(registrador_pid, NULL, 0);
+        sem_wait(&shm_sistema->sem_mutex);
+        int total_pids = 0;
+
+        for (int i = 0; i < MAX_MINEROS; i++) {
+            if(shm_sistema->pid[i] != 0) {
+                total_pids++;
+            }
+            if(shm_sistema->pid[i] == getpid()) {
+                shm_sistema->pid[i] = 0;
+                shm_sistema->monedas[i] = 0;
+                shm_sistema->votos[i] = 0;
+            }
+        }
+
         sem_post(&shm_sistema->sem_mutex);
 
-        if(sem_trywait(&shm_sistema->sem_empty) == -1) {
+        if(total_pids == 1) {
+            Block mensaje;
+            memset(&mensaje, 0, sizeof(Block));
+            mensaje.flag = false;
+            mensaje.fin = true;
+
+            if (mq_send(mq,(char*)&mensaje, sizeof(Block), 0) == -1) {
+                perror("mq_send");
+                exit(EXIT_FAILURE);
+            }
+
+            mq_close(mq);
             munmap(shm_sistema, sizeof(Sistema));
             close(fd_shm);
             shm_unlink(SHM_SISTEMA);
-            exit(EXIT_FAILURE);
+            exit(EXIT_SUCCESS);
         }
 
-        /* SE AÑADE EL NUEVO PID AL SISTEMA */
-        sem_wait(&shm_sistema->sem_empty);
-        sem_wait(&shm_sistema->sem_mutex);
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            if (shm_sistema->pid[i] == 0) {
-                shm_sistema->pid[i] = getpid();
-                shm_sistema->votos[i] = 0;
-                break;
-            }
-        }
-
-        sem_post(&shm_sistema->sem_mutex);
-        sem_post(&shm_sistema->sem_full);
-
-    } else {
-        /* SE CREA SISTEMA POR PRIMERA VEZ */
-
-        /* SE ESTABLECE EL TAMAÑO DEL SEGMENTO DE MEMORIA COMPARTIDA */
-        if(ftruncate(fd_shm, sizeof(Sistema)) == -1) {
-            perror("ftruncate");
-            close(fd_shm);
-            shm_unlink(SHM_SISTEMA);
-            exit(EXIT_FAILURE);
-        }
-
-        /* HACE UN MAPEO DE LA MEMORIA COMPARTIDA */
-        shm_sistema = mmap(NULL, sizeof(Sistema), PROT_READ | PROT_WRITE, MAP_SHARED, fd_shm, 0);
-        if(shm_sistema == MAP_FAILED) {
-            perror("mmap");
-            close(fd_shm);
-            shm_unlink(SHM_SISTEMA);
-            exit(EXIT_FAILURE);
-        }
-
-        Block bloque_actual;
-        memset(&bloque_actual, 0, sizeof(Block));
-        bloque_actual.objetivo = 0;
-        bloque_actual.solucion = 0;
-        bloque_actual.num_carteras = 0;
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            bloque_actual.pid_carteras[i] = 0;
-            bloque_actual.monedas[i] = 0;
-        }
-
-        Block ultimo_bloque;
-        memset(&ultimo_bloque, 0, sizeof(Block));
-        ultimo_bloque.id = -1;
-        ultimo_bloque.num_carteras = 0;
-
-        shm_sistema->bloque_actual = bloque_actual;
-        shm_sistema->ultimo_bloque = ultimo_bloque;
-
-        /* SE CREA LA COLA DE MENSAJES */
-        attributes.mq_flags = 0;
-        attributes.mq_maxmsg = MAX_MSG;
-        attributes.mq_msgsize = sizeof(Block);
-        attributes.mq_curmsgs = 0;
-
-        mq_unlink(MQ_NAME);
-        mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR, &attributes);
-        if (mq == (mqd_t)-1) {
-            perror("mq_open_crear");
-            exit(EXIT_FAILURE);
-        }
-
-        /* INICIALIZA LOS ARRAYS */
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            shm_sistema->pid[i] = 0;
-            shm_sistema->monedas[i] = 0;
-            shm_sistema->votos[i] = 0;
-        }
-
-        /* INICIALIZA LOS SEMÁFOROS */
-        shm_sistema->in = 0;
-        shm_sistema->out = 0;
-        sem_init(&shm_sistema->sem_empty, 1, MAX_MINEROS);
-        sem_init(&shm_sistema->sem_full, 1, 0);
-        sem_init(&shm_sistema->sem_mutex, 1, 1);
-        sem_init(&shm_sistema->sem_mutex_bloque, 1, 1);
-        sem_init(&shm_sistema->sem_ganador, 1, 1);
-
-        sem_wait(&shm_sistema->sem_empty);
-        sem_wait(&shm_sistema->sem_mutex);
-        /* SE AÑADE EL NUEVO PID AL SISTEMA */
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            if (shm_sistema->pid[i] == 0) {
-                shm_sistema->pid[i] = getpid();
-                shm_sistema->votos[i] = 0;
-                break;
-            }
-        }
-
-        sem_post(&shm_sistema->sem_mutex);
-        sem_post(&shm_sistema->sem_full);
-
-        /* SE ENVÍA LA SEÑAL SIGUSR1 A LOS PROCESOS MINERO QUE YA ESTÁN ESPERANDO */
-
-        sem_wait(&shm_sistema->sem_mutex);
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            if(shm_sistema->pid[i] != 0) {
-                if(kill(shm_sistema->pid[i], SIGUSR1)) {
-                    perror("kill");
-                    exit(EXIT_FAILURE);
-                }
-            }
-        }
-        sem_post(&shm_sistema->sem_mutex);
-        
-    }
-
-    /* REALIZA EL PROCESO PARA RESOLVER EL POW */
-
-    while(!finalizar) {
-        if (sigwait(&mask, &sig) != 0) {
-            perror("sigwait"); 
-            return EXIT_FAILURE;
-        }
-
-        sem_wait(&shm_sistema->sem_mutex_bloque);
-        sem_wait(&shm_sistema->sem_mutex);
-        shm_sistema->bloque_actual.num_carteras++;
-        for (int i = 0; i < MAX_MINEROS; i++) {
-            if(shm_sistema->pid[i] == getpid()) {
-                shm_sistema->bloque_actual.pid_carteras[i] = getpid();
-                shm_sistema->bloque_actual.monedas[i] = shm_sistema->monedas[i];
-                break;
-            }
-        }
-        sem_post(&shm_sistema->sem_mutex);
-        sem_post(&shm_sistema->sem_mutex_bloque);
-
-        proceso_minero(n_threads, shm_sistema, mq);
-    }
-
-    /* FINALIZA EL PROCESO Y LIBERA RECURSOS */
-    sem_wait(&shm_sistema->sem_mutex);
-    int total_pids = 0;
-
-    for (int i = 0; i < MAX_MINEROS; i++) {
-        if(shm_sistema->pid[i] != 0) {
-            total_pids++;
-        }
-        if(shm_sistema->pid[i] == getpid()) {
-            shm_sistema->pid[i] = 0;
-            shm_sistema->monedas[i] = 0;
-            shm_sistema->votos[i] = 0;
-        }
-    }
-
-    sem_post(&shm_sistema->sem_mutex);
-
-    if(total_pids == 1) {
-        Block mensaje;
-        memset(&mensaje, 0, sizeof(Block));
-        mensaje.flag = false;
-        mensaje.fin = true;
-
-        if (mq_send(mq,(char*)&mensaje, sizeof(Block), 0) == -1) {
-            perror("mq_send");
-            exit(EXIT_FAILURE);
-        }
-
-        mq_close(mq);
-        munmap(shm_sistema, sizeof(Sistema));
-        close(fd_shm);
-        shm_unlink(SHM_SISTEMA);
+        sem_wait(&shm_sistema->sem_full);
+        sem_post(&shm_sistema->sem_empty);
         exit(EXIT_SUCCESS);
     }
-
-    sem_wait(&shm_sistema->sem_full);
-    sem_post(&shm_sistema->sem_empty);
-    exit(EXIT_SUCCESS);
 }
 
 

@@ -314,37 +314,61 @@ int main(int argc, char* argv[]) {
         close(pipefd[1]);
 
         char filename[64];
-        snprintf(filename, sizeof(filename), "registro_%d.txt", getpid());
-        FILE *f = fopen(filename, "a");
-        if(f == NULL) {
-            perror("fopen");
+        snprintf(filename, sizeof(filename), "registro_%d.txt", getppid());
+        int fd_reg = open(filename, O_WRONLY | O_CREAT | O_APPEND | O_SYNC, 0644);
+        if(fd_reg == -1) {
+            perror("open");
             exit(EXIT_FAILURE);
         }
 
         Block b;
-        while (read(pipefd[0], &b, sizeof(Block)) > 0) {
+        ssize_t bytes_read;
+        int exit_code = EXIT_SUCCESS;
+
+        while ((bytes_read = read(pipefd[0], &b, sizeof(Block))) > 0) {
+            
+            if(bytes_read == -1) {
+                if(errno == EINTR) continue;
+                perror("Error leyendo de la tubería");
+                exit_code = EXIT_FAILURE;
+                break;
+            }
+            if(bytes_read != sizeof(Block)) {
+                fprintf(stderr, "Lectura incompleta del bloque\n");
+                break;
+            }
             printf("Registrador recibió bloque %ld\n", b.id);
             fflush(stdout);
             if(b.flag) {
-                fprintf(f, "ID: %04ld\n", b.id);
-                fprintf(f, "Ganador: %d\n", b.ganador);
-                fprintf(f, "Objetivo: %08ld\n", b.objetivo);
-                fprintf(f, "Solución: %08ld\n", b.solucion);
-                fprintf(f, "Votos: %d/%d\n", b.num_votos_positivos, b.num_votos_totales);
-                fprintf(f, "Wallets:");
+                dprintf(fd_reg, "ID: %04ld\n", b.id);
+                if(dprintf(fd_reg, "ID: %04ld\n", b.id) < 0) {
+                    perror("Error escribiendo en registro");
+                }
+                dprintf(fd_reg, "Ganador: %d\n", b.ganador);
+                dprintf(fd_reg, "Objetivo: %08ld\n", b.objetivo);
+                dprintf(fd_reg, "Solución: %08ld\n", b.solucion);
+                dprintf(fd_reg, "Votos: %d/%d\n", b.num_votos_positivos, b.num_votos_totales);
+                dprintf(fd_reg, "Wallets:");
+                
                 for (int i = 0; i < MAX_MINEROS; i++) {
                     if (b.pid_carteras[i] != 0) {
-                        fprintf(f, " %d:%d", b.pid_carteras[i], b.monedas[i]);
+                        dprintf(fd_reg, " %d:%d", b.pid_carteras[i], b.monedas[i]);
                     }
                 }
-                fprintf(f, "\n--------------------------\n");
-                fflush(f);
+                
+                dprintf(fd_reg, "\n--------------------------\n");
+                if(fsync(fd_reg) == -1) {
+                    perror("Error sincronizando archivo");
+                    exit_code = EXIT_FAILURE;
+                    break;
+                }
             }
+            
         }
 
-        fclose(f);
+        close(fd_reg);
         close(pipefd[0]);
-        exit(EXIT_SUCCESS);
+        exit(exit_code);
     } else {
         close(pipefd[0]);
 
